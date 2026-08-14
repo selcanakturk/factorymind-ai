@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+.venv/
+venv/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Local tooling and OS files
+.DS_Store
+.idea/
+.vscode/
+
+# Data and generated model artifacts
+data/raw/*
+data/processed/*
+models/*
+*.joblib
+*.pkl
+
