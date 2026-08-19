@@ -1,0 +1,1 @@
+"""FactoryMind AI backend package."""

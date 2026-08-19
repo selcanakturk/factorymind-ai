@@ -6,3 +6,6 @@ seaborn
 scikit-learn
 joblib
 pytest
+fastapi
+uvicorn
+httpx
