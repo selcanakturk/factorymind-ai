@@ -3,6 +3,9 @@ import type {
   FailurePredictionResponse,
   HealthResponse,
   ModelInfoResponse,
+  RULModelInfoResponse,
+  RULPredictionRequest,
+  RULPredictionResponse,
 } from "../types/api";
 
 const API_BASE_URL = (
@@ -58,8 +61,14 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 export const factoryMindApi = {
   health: () => request<HealthResponse>("/health"),
   modelInfo: () => request<ModelInfoResponse>("/model/info"),
+  getRulModelInfo: () => request<RULModelInfoResponse>("/model/rul/info"),
   predictFailure: (payload: FailurePredictionRequest) =>
     request<FailurePredictionResponse>("/predict/failure", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  predictRul: (payload: RULPredictionRequest) =>
+    request<RULPredictionResponse>("/predict/rul", {
       method: "POST",
       body: JSON.stringify(payload),
     }),

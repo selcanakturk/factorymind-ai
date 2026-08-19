@@ -6,6 +6,7 @@ interface Props {
   loading: boolean;
   error: string | null;
   onOpenAnalysis: () => void;
+  onOpenRul: () => void;
   onRetry: () => void;
 }
 
@@ -22,6 +23,7 @@ export function OverviewPage({
   loading,
   error,
   onOpenAnalysis,
+  onOpenRul,
   onRetry,
 }: Props) {
   return (
@@ -31,8 +33,8 @@ export function OverviewPage({
           <p className="eyebrow">Predictive maintenance · Module 01</p>
           <h1>Machine intelligence,<br />made operational.</h1>
           <p className="page-lead">
-            Evaluate machine operating conditions with a calibrated,
-            development-stage failure-risk model—without inventing fleet data.
+            Evaluate failure risk and trajectory-level remaining useful life
+            with two development-stage machine-learning engines.
           </p>
         </div>
         <button className="primary-button" onClick={onOpenAnalysis}>
@@ -106,9 +108,8 @@ export function OverviewPage({
       </section>
 
       <section className="future-strip" aria-label="Future modules">
-        <div><span className="section-kicker">Platform roadmap</span><h2>Built to expand beyond failure risk.</h2></div>
+        <button className="future-item available-module" onClick={onOpenRul}><span>RUL</span><div><strong>Remaining Useful Life</strong><small>Available · Open module</small></div></button>
         {[
-          ["RUL", "Remaining Useful Life"],
           ["AD", "Anomaly Detection"],
           ["QI", "Quality Inspection"],
         ].map(([code, title]) => (
