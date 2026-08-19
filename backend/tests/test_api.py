@@ -135,3 +135,29 @@ def test_swagger_openapi_schema_is_available(client):
     assert docs.status_code == 200
     assert schema.status_code == 200
     assert "/predict/failure" in schema.json()["paths"]
+
+
+def test_local_frontend_origin_can_preflight_prediction(client):
+    response = client.options(
+        "/predict/failure",
+        headers={
+            "Origin": "http://localhost:3000",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://localhost:3000"
+
+
+def test_unlisted_origin_is_not_granted_cors_access(client):
+    response = client.options(
+        "/predict/failure",
+        headers={
+            "Origin": "https://untrusted.example",
+            "Access-Control-Request-Method": "POST",
+        },
+    )
+
+    assert "access-control-allow-origin" not in response.headers
