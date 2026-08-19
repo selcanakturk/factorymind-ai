@@ -100,7 +100,8 @@ def predict_latest_rul(model: Any, trajectory: pd.DataFrame) -> dict[str, Any]:
 
     return {
         "predicted_rul_cycles": round(bounded_prediction, 1),
-        "raw_model_prediction": raw_prediction,
+        # Normalize insignificant parallel-reduction noise for a stable JSON contract.
+        "raw_model_prediction": round(raw_prediction, 12),
         "rul_display": display,
         "prediction_horizon_cap": RUL_CAP,
         "history_cycle_count": history_count,

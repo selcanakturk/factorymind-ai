@@ -21,6 +21,7 @@ from .rul_features import (
     RUL_CAP,
     RUL_PREDICTOR_COLUMNS,
     TEMPORAL_BASE_SENSORS,
+    TEMPORAL_FEATURE_DEFINITIONS,
     TEMPORAL_FEATURE_COLUMNS,
     engineer_temporal_features,
 )
@@ -101,13 +102,7 @@ def build_metadata(training_predictions: np.ndarray) -> dict:
         "excluded_sensors": EXCLUDED_SENSORS,
         "retained_sensors": RETAINED_SENSORS,
         "temporal_base_sensors": TEMPORAL_BASE_SENSORS,
-        "temporal_feature_definitions": {
-            "lag_1": "positive per-unit shift of 1 observation",
-            "lag_5": "positive per-unit shift of 5 observations",
-            "rolling_mean_5": "trailing window=5, min_periods=1",
-            "rolling_std_5": "trailing window=5, min_periods=1, ddof=0",
-            "delta_1": "current sensor value minus lag_1",
-        },
+        "temporal_feature_definitions": TEMPORAL_FEATURE_DEFINITIONS,
         "minimum_full_context_cycles": MINIMUM_FULL_CONTEXT_CYCLES,
         "short_history_behavior": (
             "Trajectories with 1-5 cycles are scoreable using trained median "

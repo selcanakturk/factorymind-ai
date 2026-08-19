@@ -32,6 +32,8 @@ def test_health_succeeds_and_model_is_loaded(client):
         "status": "ok",
         "service": "FactoryMind AI",
         "model_loaded": True,
+        "failure_model_loaded": True,
+        "rul_model_loaded": True,
     }
 
 

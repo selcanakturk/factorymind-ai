@@ -8,8 +8,23 @@ from typing import Any
 
 import joblib
 import numpy as np
+import pandas as pd
+import sklearn
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.pipeline import Pipeline
 
 from src.features import ENGINEERED_FEATURES, RAW_FEATURES
+from src.rul_features import (
+    EXCLUDED_SENSORS,
+    MINIMUM_FULL_CONTEXT_CYCLES,
+    RAW_INPUT_COLUMNS as RUL_RAW_INPUT_COLUMNS,
+    RAW_PREDICTOR_COLUMNS as RUL_RAW_PREDICTOR_COLUMNS,
+    RUL_CAP,
+    RUL_PREDICTOR_COLUMNS,
+    TEMPORAL_BASE_SENSORS,
+    TEMPORAL_FEATURE_DEFINITIONS,
+)
+from src.rul_pipeline import FROZEN_RANDOM_FOREST_HYPERPARAMETERS
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -20,10 +35,22 @@ MODEL_METADATA_PATH = (
 THRESHOLD_PATH = (
     PROJECT_ROOT / "models" / "factorymind_failure_risk_thresholds_v1.json"
 )
+RUL_MODEL_PATH = PROJECT_ROOT / "models" / "factorymind_rul_model_v1.joblib"
+RUL_METADATA_PATH = (
+    PROJECT_ROOT / "models" / "factorymind_rul_model_v1.metadata.json"
+)
 
 
 class ArtifactLoadError(RuntimeError):
     """Raised when required inference artifacts cannot be loaded safely."""
+
+
+@dataclass(frozen=True)
+class RULModelResources:
+    """Validated RUL artifacts loaded once at application startup."""
+
+    model: Any
+    metadata: dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -34,6 +61,7 @@ class ModelResources:
     model_metadata: dict[str, Any]
     threshold_metadata: dict[str, Any]
     positive_class_index: int
+    rul: RULModelResources | None = None
 
     @property
     def thresholds(self) -> dict[str, float]:
@@ -198,6 +226,155 @@ def _resolve_positive_class_index(model: Any) -> int:
     return int(positive_indices[0])
 
 
+def _require_finite_number(
+    metadata: dict[str, Any], field: str, artifact_name: str
+) -> float:
+    value = metadata.get(field)
+    if (
+        not isinstance(value, (int, float))
+        or isinstance(value, bool)
+        or not math.isfinite(value)
+    ):
+        raise ArtifactLoadError(
+            f"{artifact_name} field {field!r} must be a finite number."
+        )
+    return float(value)
+
+
+def _validate_rul_metadata(metadata: dict[str, Any]) -> None:
+    artifact_name = "RUL model metadata"
+    expected_strings = {
+        "model_name": "FactoryMind RUL FD001 Random Forest",
+        "model_version": "1.0.0",
+        "model_family": "RandomForestRegressor",
+        "dataset": "NASA C-MAPSS",
+        "dataset_subset": "FD001",
+        "target": "capped_rul",
+    }
+    for field, expected in expected_strings.items():
+        value = _require_nonempty_string(metadata, field, artifact_name)
+        if value != expected:
+            raise ArtifactLoadError(
+                f"RUL metadata field {field!r} is incompatible with the frozen specification."
+            )
+    for field in [
+        "short_history_behavior",
+        "output_interpretation",
+        "warning",
+        "disclaimer",
+    ]:
+        _require_nonempty_string(metadata, field, artifact_name)
+
+    list_contracts = {
+        "raw_input_columns": RUL_RAW_INPUT_COLUMNS,
+        "raw_predictor_columns": RUL_RAW_PREDICTOR_COLUMNS,
+        "predictor_columns": RUL_PREDICTOR_COLUMNS,
+        "excluded_sensors": EXCLUDED_SENSORS,
+        "temporal_base_sensors": TEMPORAL_BASE_SENSORS,
+    }
+    for field, expected in list_contracts.items():
+        actual = _require_string_list(metadata, field, artifact_name)
+        if actual != expected:
+            raise ArtifactLoadError(
+                f"RUL metadata {field} does not match the production feature contract."
+            )
+
+    expected_numbers = {
+        "rul_cap": RUL_CAP,
+        "predictor_count": len(RUL_PREDICTOR_COLUMNS),
+        "minimum_full_context_cycles": MINIMUM_FULL_CONTEXT_CYCLES,
+        "training_unit_count": 100,
+        "training_row_count": 20_631,
+    }
+    for field, expected in expected_numbers.items():
+        value = _require_finite_number(metadata, field, artifact_name)
+        if value != expected:
+            raise ArtifactLoadError(
+                f"RUL metadata field {field!r} does not match the frozen value {expected}."
+            )
+
+    definitions = metadata.get("temporal_feature_definitions")
+    if definitions != TEMPORAL_FEATURE_DEFINITIONS:
+        raise ArtifactLoadError(
+            "RUL temporal feature definitions do not match production source."
+        )
+    hyperparameters = metadata.get("frozen_hyperparameters")
+    if hyperparameters != FROZEN_RANDOM_FOREST_HYPERPARAMETERS:
+        raise ArtifactLoadError(
+            "RUL frozen hyperparameters do not match production source."
+        )
+
+    limitations = _require_string_list(metadata, "known_limitations", artifact_name)
+    if not limitations:
+        raise ArtifactLoadError("RUL known_limitations must not be empty.")
+
+    for metrics_field in [
+        "groupkfold_metrics_notebook_08",
+        "official_fd001_endpoint_metrics_notebook_09",
+        "near_failure_metrics",
+    ]:
+        metrics = metadata.get(metrics_field)
+        if not isinstance(metrics, dict) or not metrics:
+            raise ArtifactLoadError(
+                f"RUL metadata field {metrics_field!r} must be a non-empty object."
+            )
+
+    package_versions = metadata.get("package_versions")
+    if not isinstance(package_versions, dict):
+        raise ArtifactLoadError("RUL package_versions must be an object.")
+    runtime_versions = {
+        "scikit_learn": sklearn.__version__,
+        "numpy": np.__version__,
+        "pandas": pd.__version__,
+        "joblib": joblib.__version__,
+    }
+    for package, runtime_version in runtime_versions.items():
+        recorded = package_versions.get(package)
+        if not isinstance(recorded, str) or not recorded:
+            raise ArtifactLoadError(f"RUL package version {package!r} is missing.")
+        if recorded != runtime_version:
+            raise ArtifactLoadError(
+                f"RUL artifact {package} version {recorded!r} is incompatible with runtime {runtime_version!r}."
+            )
+
+
+def _validate_rul_model(model: Any) -> None:
+    if not isinstance(model, Pipeline) or not callable(getattr(model, "predict", None)):
+        raise ArtifactLoadError("Loaded RUL artifact must be a fitted sklearn Pipeline.")
+    if list(getattr(model, "feature_names_in_", [])) != RUL_PREDICTOR_COLUMNS:
+        raise ArtifactLoadError(
+            "Loaded RUL model feature_names_in_ do not match the frozen predictor contract."
+        )
+    estimator = model.named_steps.get("model")
+    if not isinstance(estimator, RandomForestRegressor):
+        raise ArtifactLoadError(
+            "Loaded RUL model family is incompatible with RandomForestRegressor."
+        )
+    for name, expected in FROZEN_RANDOM_FOREST_HYPERPARAMETERS.items():
+        if estimator.get_params().get(name) != expected:
+            raise ArtifactLoadError(
+                f"Loaded RUL model parameter {name!r} does not match the frozen specification."
+            )
+
+
+def load_rul_resources() -> RULModelResources:
+    """Load and validate the frozen RUL model and metadata."""
+    if not RUL_MODEL_PATH.is_file():
+        raise ArtifactLoadError(
+            f"Required RUL model artifact is missing: {RUL_MODEL_PATH}"
+        )
+    try:
+        model = joblib.load(RUL_MODEL_PATH)
+    except Exception as exc:
+        raise ArtifactLoadError(
+            f"Could not load RUL model artifact: {RUL_MODEL_PATH}"
+        ) from exc
+    metadata = _load_json(RUL_METADATA_PATH, "RUL model metadata")
+    _validate_rul_metadata(metadata)
+    _validate_rul_model(model)
+    return RULModelResources(model=model, metadata=metadata)
+
+
 def load_model_resources() -> ModelResources:
     """Load and validate all inference artifacts from the project model directory."""
     if not MODEL_PATH.is_file():
@@ -221,10 +398,12 @@ def load_model_resources() -> ModelResources:
         "thresholds": normalized_thresholds,
     }
     positive_class_index = _resolve_positive_class_index(model)
+    rul_resources = load_rul_resources()
 
     return ModelResources(
         model=model,
         model_metadata=model_metadata,
         threshold_metadata=threshold_metadata,
         positive_class_index=positive_class_index,
+        rul=rul_resources,
     )

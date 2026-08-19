@@ -2,7 +2,7 @@
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr
 
 
 class FailurePredictionRequest(BaseModel):
@@ -39,6 +39,8 @@ class HealthResponse(BaseModel):
     status: Literal["ok"]
     service: str
     model_loaded: bool
+    failure_model_loaded: bool
+    rul_model_loaded: bool
 
 
 class ModelInfoResponse(BaseModel):
@@ -52,3 +54,70 @@ class ModelInfoResponse(BaseModel):
     development_evaluation_metrics: dict[str, float]
     output_interpretation: str
     methodological_warnings: list[str]
+
+
+class RULObservation(BaseModel):
+    """One strict raw operating-cycle observation for RUL inference."""
+
+    model_config = ConfigDict(extra="forbid", strict=True, allow_inf_nan=False)
+
+    cycle: int = Field(gt=0)
+    operational_setting_1: float
+    operational_setting_2: float
+    operational_setting_3: float
+    sensor_2: float
+    sensor_3: float
+    sensor_4: float
+    sensor_7: float
+    sensor_8: float
+    sensor_9: float
+    sensor_11: float
+    sensor_12: float
+    sensor_13: float
+    sensor_14: float
+    sensor_15: float
+    sensor_17: float
+    sensor_20: float
+    sensor_21: float
+
+
+class RULPredictionRequest(BaseModel):
+    """A single ordered engine trajectory; unit identity is nonpredictive metadata."""
+
+    model_config = ConfigDict(extra="forbid", strict=True, allow_inf_nan=False)
+
+    unit_id: StrictStr | StrictInt | None = None
+    observations: list[RULObservation] = Field(min_length=1)
+
+
+class RULPredictionResponse(BaseModel):
+    unit_id: str | int | None
+    predicted_rul_cycles: float = Field(ge=0, le=125)
+    raw_model_prediction: float = Field(ge=0, le=125)
+    rul_display: str
+    prediction_horizon_cap: int
+    history_cycle_count: int = Field(ge=1)
+    history_quality: Literal["limited_history", "full_context"]
+    model_version: str
+    dataset: str
+    development_stage: Literal[True]
+    warning: str
+    disclaimer: str
+
+
+class RULModelInfoResponse(BaseModel):
+    model_name: str
+    model_version: str
+    model_family: str
+    dataset: str
+    dataset_subset: str
+    target: str
+    rul_cap: int
+    predictor_count: int
+    minimum_full_context_cycles: int
+    official_endpoint_metrics: dict[str, float]
+    near_failure_metrics: dict[str, float | str]
+    known_limitations: list[str]
+    output_interpretation: str
+    development_warning: str
+    disclaimer: str

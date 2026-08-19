@@ -8,6 +8,13 @@ import pandas as pd
 
 RUL_CAP = 125
 MINIMUM_FULL_CONTEXT_CYCLES = 6
+TEMPORAL_FEATURE_DEFINITIONS = {
+    "lag_1": "positive per-unit shift of 1 observation",
+    "lag_5": "positive per-unit shift of 5 observations",
+    "rolling_mean_5": "trailing window=5, min_periods=1",
+    "rolling_std_5": "trailing window=5, min_periods=1, ddof=0",
+    "delta_1": "current sensor value minus lag_1",
+}
 
 OPERATIONAL_SETTING_COLUMNS = [
     "operational_setting_1",
