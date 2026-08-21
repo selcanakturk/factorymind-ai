@@ -1,4 +1,7 @@
 import type {
+  AnomalyModelInfoResponse,
+  AnomalyPredictionRequest,
+  AnomalyPredictionResponse,
   FailurePredictionRequest,
   FailurePredictionResponse,
   HealthResponse,
@@ -62,6 +65,7 @@ export const factoryMindApi = {
   health: () => request<HealthResponse>("/health"),
   modelInfo: () => request<ModelInfoResponse>("/model/info"),
   getRulModelInfo: () => request<RULModelInfoResponse>("/model/rul/info"),
+  getAnomalyModelInfo: () => request<AnomalyModelInfoResponse>("/model/anomaly/info"),
   predictFailure: (payload: FailurePredictionRequest) =>
     request<FailurePredictionResponse>("/predict/failure", {
       method: "POST",
@@ -69,6 +73,11 @@ export const factoryMindApi = {
     }),
   predictRul: (payload: RULPredictionRequest) =>
     request<RULPredictionResponse>("/predict/rul", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  predictAnomaly: (payload: AnomalyPredictionRequest) =>
+    request<AnomalyPredictionResponse>("/predict/anomaly", {
       method: "POST",
       body: JSON.stringify(payload),
     }),

@@ -7,6 +7,7 @@ interface Props {
   error: string | null;
   onOpenAnalysis: () => void;
   onOpenRul: () => void;
+  onOpenAnomaly: () => void;
   onRetry: () => void;
 }
 
@@ -24,6 +25,7 @@ export function OverviewPage({
   error,
   onOpenAnalysis,
   onOpenRul,
+  onOpenAnomaly,
   onRetry,
 }: Props) {
   return (
@@ -33,8 +35,8 @@ export function OverviewPage({
           <p className="eyebrow">Predictive maintenance · Module 01</p>
           <h1>Machine intelligence,<br />made operational.</h1>
           <p className="page-lead">
-            Evaluate failure risk and trajectory-level remaining useful life
-            with two development-stage machine-learning engines.
+            Evaluate failure risk, remaining useful life, and unusual sensor
+            behavior with three development-stage machine-learning engines.
           </p>
         </div>
         <button className="primary-button" onClick={onOpenAnalysis}>
@@ -109,12 +111,8 @@ export function OverviewPage({
 
       <section className="future-strip" aria-label="Future modules">
         <button className="future-item available-module" onClick={onOpenRul}><span>RUL</span><div><strong>Remaining Useful Life</strong><small>Available · Open module</small></div></button>
-        {[
-          ["AD", "Anomaly Detection"],
-          ["QI", "Quality Inspection"],
-        ].map(([code, title]) => (
-          <div className="future-item" key={code}><span>{code}</span><div><strong>{title}</strong><small>Coming Soon</small></div></div>
-        ))}
+        <button className="future-item available-module" onClick={onOpenAnomaly}><span>AD</span><div><strong>Anomaly Detection</strong><small>{health?.anomaly_model_loaded ? "Available · Open module" : "Module unavailable"}</small></div></button>
+        <div className="future-item"><span>QI</span><div><strong>Quality Inspection</strong><small>Coming Soon</small></div></div>
       </section>
     </div>
   );
