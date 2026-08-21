@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 
 from .core.model_loader import (
     ArtifactLoadError,
+    AnomalyModelResources,
     ModelResources,
     RULModelResources,
     load_model_resources,
@@ -21,6 +22,14 @@ from .schemas import (
     RULModelInfoResponse,
     RULPredictionRequest,
     RULPredictionResponse,
+    AnomalyModelInfoResponse,
+    AnomalyPredictionRequest,
+    AnomalyPredictionResponse,
+)
+from .services.anomaly_prediction_service import (
+    AnomalyInputError,
+    AnomalyPredictionError,
+    AnomalyPredictionService,
 )
 from .services.prediction_service import PredictionError, PredictionService
 from .services.rul_prediction_service import (
@@ -43,7 +52,8 @@ app = FastAPI(
     title="FactoryMind AI Inference API",
     description=(
         "Development-stage machine intelligence for calibrated failure risk and "
-        "trajectory-level remaining useful life estimation."
+        "trajectory-level remaining useful life estimation, and nonprobabilistic "
+        "anomaly condition monitoring."
     ),
     version="1.0.0",
     lifespan=lifespan,
@@ -104,6 +114,13 @@ def get_rul_resources(request: Request) -> RULModelResources:
     return resources.rul
 
 
+def get_anomaly_resources(request: Request) -> AnomalyModelResources:
+    resources = get_resources(request)
+    if resources.anomaly is None:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Anomaly model resources are unavailable.")
+    return resources.anomaly
+
+
 @app.get("/health", response_model=HealthResponse, tags=["system"])
 def health(request: Request) -> HealthResponse:
     resources = getattr(request.app.state, "model_resources", None)
@@ -114,7 +131,8 @@ def health(request: Request) -> HealthResponse:
         )
     failure_ready = resources.model is not None
     rul_ready = resources.rul is not None
-    if not failure_ready or not rul_ready:
+    anomaly_ready = resources.anomaly is not None
+    if not failure_ready or not rul_ready or not anomaly_ready:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Model resources are unavailable.",
@@ -125,6 +143,36 @@ def health(request: Request) -> HealthResponse:
         model_loaded=failure_ready,
         failure_model_loaded=failure_ready,
         rul_model_loaded=rul_ready,
+        anomaly_model_loaded=anomaly_ready,
+    )
+
+
+@app.get(
+    "/model/anomaly/info",
+    response_model=AnomalyModelInfoResponse,
+    tags=["model"],
+    summary="Get anomaly model information",
+    description="Returns the curated frozen FD001 anomaly specification without exposing raw artifact internals.",
+)
+def anomaly_model_info(request: Request) -> AnomalyModelInfoResponse:
+    metadata = get_anomaly_resources(request).metadata
+    alerts = metadata["alert_rate_stability_notebook_12"]
+    return AnomalyModelInfoResponse(
+        model_name=metadata["model_name"], model_version=metadata["model_version"],
+        model_family=metadata["model_family"], dataset=metadata["dataset"],
+        dataset_subset=metadata["dataset_subset"], predictor_count=metadata["predictor_count"],
+        normal_reference_definition=metadata["normal_reference_definition"],
+        threshold_percentile=metadata["threshold_quantile"] * 100,
+        raw_threshold=metadata["threshold_raw_score"],
+        persistence_window=metadata["persistence_window"],
+        persistence_required_count=metadata["persistence_required_count"],
+        minimum_persistence_history=metadata["minimum_persistence_history"],
+        repeated_split_stability=metadata["repeated_split_stability_notebook_12"],
+        healthy_alert_burden={"mean_pct": alerts["healthy_observation_mean_pct"], "std_pct": alerts["healthy_observation_std_pct"]},
+        critical_alert_coverage={"observation_mean_pct": alerts["critical_observation_mean_pct"], "observation_std_pct": alerts["critical_observation_std_pct"], "engine_pct": alerts["critical_engine_coverage_pct"]},
+        lead_time_findings=metadata["lead_time_findings_notebook_12"],
+        known_limitations=metadata["known_limitations"], output_interpretation=metadata["output_interpretation"],
+        warning=metadata["warning"], disclaimer=metadata["disclaimer"],
     )
 
 
@@ -232,3 +280,27 @@ def predict_rul(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="RUL prediction could not be completed.",
         ) from exc
+
+
+@app.post(
+    "/predict/anomaly",
+    response_model=AnomalyPredictionResponse,
+    tags=["prediction"],
+    summary="Score an engine trajectory for unusual sensor behavior",
+    description=(
+        "Scores one chronological FD001-format sensor trajectory. The percentile is "
+        "nonprobabilistic and relative to the development normal-reference distribution. "
+        "Persistent alerting requires at least 3 of the latest 5 cycles above the boundary. "
+        "Anomaly does not mean failure. Sensor context describes readings most unusual "
+        "relative to the development normal reference, not feature importance."
+    ),
+    responses={422:{"description":"Invalid request or trajectory contract"},503:{"description":"Anomaly model resources unavailable"},500:{"description":"Unexpected inference failure"}},
+)
+def predict_anomaly(prediction_request: AnomalyPredictionRequest, request: Request) -> AnomalyPredictionResponse:
+    resources = get_anomaly_resources(request)
+    try:
+        return AnomalyPredictionService(resources).predict(prediction_request)
+    except AnomalyInputError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+    except AnomalyPredictionError as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Anomaly prediction could not be completed.") from exc

@@ -11,7 +11,22 @@ import numpy as np
 import pandas as pd
 import sklearn
 from sklearn.ensemble import RandomForestRegressor
+from sklearn.ensemble import IsolationForest
 from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
+
+from src.anomaly_features import (
+    ANOMALY_PREDICTOR_COUNT,
+    ANOMALY_SENSOR_COLUMNS,
+    NORMAL_REFERENCE_RUL_THRESHOLD,
+    PERSISTENCE_REQUIRED_COUNT,
+    PERSISTENCE_WINDOW,
+    THRESHOLD_QUANTILE,
+)
+from src.anomaly_pipeline import (
+    AnomalyModelBundle,
+    FROZEN_ISOLATION_FOREST_HYPERPARAMETERS,
+)
 
 from src.features import ENGINEERED_FEATURES, RAW_FEATURES
 from src.rul_features import (
@@ -39,6 +54,8 @@ RUL_MODEL_PATH = PROJECT_ROOT / "models" / "factorymind_rul_model_v1.joblib"
 RUL_METADATA_PATH = (
     PROJECT_ROOT / "models" / "factorymind_rul_model_v1.metadata.json"
 )
+ANOMALY_MODEL_PATH = PROJECT_ROOT / "models" / "factorymind_anomaly_model_v1.joblib"
+ANOMALY_METADATA_PATH = PROJECT_ROOT / "models" / "factorymind_anomaly_model_v1.metadata.json"
 
 
 class ArtifactLoadError(RuntimeError):
@@ -54,6 +71,14 @@ class RULModelResources:
 
 
 @dataclass(frozen=True)
+class AnomalyModelResources:
+    """Validated anomaly artifacts loaded once at application startup."""
+
+    bundle: AnomalyModelBundle
+    metadata: dict[str, Any]
+
+
+@dataclass(frozen=True)
 class ModelResources:
     """Artifacts loaded once for use throughout the application process."""
 
@@ -62,6 +87,7 @@ class ModelResources:
     threshold_metadata: dict[str, Any]
     positive_class_index: int
     rul: RULModelResources | None = None
+    anomaly: AnomalyModelResources | None = None
 
     @property
     def thresholds(self) -> dict[str, float]:
@@ -375,6 +401,108 @@ def load_rul_resources() -> RULModelResources:
     return RULModelResources(model=model, metadata=metadata)
 
 
+def _validate_anomaly_metadata(metadata: dict[str, Any]) -> None:
+    artifact_name = "Anomaly model metadata"
+    expected_strings = {
+        "model_name": "FactoryMind Anomaly FD001 Isolation Forest",
+        "model_version": "1.0.0",
+        "model_family": "IsolationForest",
+        "dataset": "NASA C-MAPSS",
+        "dataset_subset": "FD001",
+    }
+    for field, expected in expected_strings.items():
+        if _require_nonempty_string(metadata, field, artifact_name) != expected:
+            raise ArtifactLoadError(f"Anomaly metadata field {field!r} is incompatible with the frozen specification.")
+    for field in [
+        "normal_reference_definition", "scaler_type", "score_direction",
+        "percentile_mapping_method", "sensor_deviation_method",
+        "output_interpretation", "warning", "disclaimer",
+    ]:
+        _require_nonempty_string(metadata, field, artifact_name)
+    if _require_string_list(metadata, "predictor_columns", artifact_name) != ANOMALY_SENSOR_COLUMNS:
+        raise ArtifactLoadError("Anomaly metadata predictor_columns do not match the frozen sensor contract.")
+    expected_numbers = {
+        "predictor_count": ANOMALY_PREDICTOR_COUNT,
+        "normal_reference_rul_threshold": NORMAL_REFERENCE_RUL_THRESHOLD,
+        "normal_reference_row_count": 8_031,
+        "normal_reference_unit_count": 100,
+        "threshold_quantile": THRESHOLD_QUANTILE,
+        "persistence_window": PERSISTENCE_WINDOW,
+        "persistence_required_count": PERSISTENCE_REQUIRED_COUNT,
+        "minimum_persistence_history": PERSISTENCE_WINDOW,
+    }
+    for field, expected in expected_numbers.items():
+        if _require_finite_number(metadata, field, artifact_name) != expected:
+            raise ArtifactLoadError(f"Anomaly metadata field {field!r} does not match the frozen value {expected}.")
+    threshold = _require_finite_number(metadata, "threshold_raw_score", artifact_name)
+    if threshold <= 0:
+        raise ArtifactLoadError("Anomaly threshold_raw_score must be positive.")
+    if metadata.get("isolation_forest_hyperparameters") != FROZEN_ISOLATION_FOREST_HYPERPARAMETERS:
+        raise ArtifactLoadError("Anomaly Isolation Forest hyperparameters do not match production source.")
+    score_summary = metadata.get("score_distribution_summary")
+    if not isinstance(score_summary, dict):
+        raise ArtifactLoadError("Anomaly score_distribution_summary must be an object.")
+    for field in ["min", "median", "mean", "std", "p90", "p95", "p97_5", "p99", "max"]:
+        _require_finite_number(score_summary, field, "Anomaly score distribution")
+    if not math.isclose(float(score_summary["p97_5"]), threshold, rel_tol=0, abs_tol=1e-12):
+        raise ArtifactLoadError("Anomaly score summary and threshold_raw_score do not match.")
+    limitations = _require_string_list(metadata, "known_limitations", artifact_name)
+    if not limitations:
+        raise ArtifactLoadError("Anomaly known_limitations must not be empty.")
+    for field in ["repeated_split_stability_notebook_12", "alert_rate_stability_notebook_12", "persistence_diagnostics_notebook_12", "lead_time_findings_notebook_12"]:
+        if not isinstance(metadata.get(field), dict) or not metadata[field]:
+            raise ArtifactLoadError(f"Anomaly metadata field {field!r} must be a non-empty object.")
+    package_versions = metadata.get("package_versions")
+    if not isinstance(package_versions, dict):
+        raise ArtifactLoadError("Anomaly package_versions must be an object.")
+    runtime_versions = {"scikit_learn": sklearn.__version__, "numpy": np.__version__, "pandas": pd.__version__, "joblib": joblib.__version__}
+    for package, runtime in runtime_versions.items():
+        recorded = package_versions.get(package)
+        if not isinstance(recorded, str) or not recorded:
+            raise ArtifactLoadError(f"Anomaly package version {package!r} is missing.")
+        if recorded != runtime:
+            raise ArtifactLoadError(f"Anomaly artifact {package} version {recorded!r} is incompatible with runtime {runtime!r}.")
+
+
+def _validate_anomaly_bundle(bundle: Any, metadata: dict[str, Any]) -> None:
+    if not isinstance(bundle, AnomalyModelBundle):
+        raise ArtifactLoadError("Loaded anomaly artifact must be an AnomalyModelBundle.")
+    if not isinstance(bundle.scaler, StandardScaler) or not hasattr(bundle.scaler, "mean_"):
+        raise ArtifactLoadError("Loaded anomaly bundle is missing a fitted StandardScaler.")
+    if not isinstance(bundle.detector, IsolationForest) or not hasattr(bundle.detector, "estimators_"):
+        raise ArtifactLoadError("Loaded anomaly bundle is missing a fitted IsolationForest.")
+    if int(getattr(bundle.scaler, "n_features_in_", -1)) != ANOMALY_PREDICTOR_COUNT:
+        raise ArtifactLoadError("Anomaly scaler predictor count is incompatible.")
+    if int(getattr(bundle.detector, "n_features_in_", -1)) != ANOMALY_PREDICTOR_COUNT:
+        raise ArtifactLoadError("Anomaly detector predictor count is incompatible.")
+    for name, expected in FROZEN_ISOLATION_FOREST_HYPERPARAMETERS.items():
+        if bundle.detector.get_params().get(name) != expected:
+            raise ArtifactLoadError(f"Loaded anomaly detector parameter {name!r} does not match the frozen specification.")
+    scores = np.asarray(bundle.sorted_normal_scores)
+    if scores.shape != (8_031,) or not np.isfinite(scores).all() or np.any(scores[1:] < scores[:-1]):
+        raise ArtifactLoadError("Anomaly reference-score distribution is malformed.")
+    expected_threshold = float(np.quantile(scores, THRESHOLD_QUANTILE))
+    if not math.isclose(bundle.raw_threshold, expected_threshold, rel_tol=0, abs_tol=1e-12):
+        raise ArtifactLoadError("Anomaly bundle threshold is inconsistent with reference scores.")
+    if not math.isclose(bundle.raw_threshold, float(metadata["threshold_raw_score"]), rel_tol=0, abs_tol=1e-12):
+        raise ArtifactLoadError("Anomaly bundle and metadata thresholds do not match.")
+    if bundle.threshold_quantile != THRESHOLD_QUANTILE or bundle.model_version != metadata["model_version"]:
+        raise ArtifactLoadError("Anomaly bundle version or threshold quantile is incompatible.")
+
+
+def load_anomaly_resources() -> AnomalyModelResources:
+    if not ANOMALY_MODEL_PATH.is_file():
+        raise ArtifactLoadError(f"Required anomaly model artifact is missing: {ANOMALY_MODEL_PATH}")
+    try:
+        bundle = joblib.load(ANOMALY_MODEL_PATH)
+    except Exception as exc:
+        raise ArtifactLoadError(f"Could not load anomaly model artifact: {ANOMALY_MODEL_PATH}") from exc
+    metadata = _load_json(ANOMALY_METADATA_PATH, "anomaly model metadata")
+    _validate_anomaly_metadata(metadata)
+    _validate_anomaly_bundle(bundle, metadata)
+    return AnomalyModelResources(bundle=bundle, metadata=metadata)
+
+
 def load_model_resources() -> ModelResources:
     """Load and validate all inference artifacts from the project model directory."""
     if not MODEL_PATH.is_file():
@@ -399,6 +527,7 @@ def load_model_resources() -> ModelResources:
     }
     positive_class_index = _resolve_positive_class_index(model)
     rul_resources = load_rul_resources()
+    anomaly_resources = load_anomaly_resources()
 
     return ModelResources(
         model=model,
@@ -406,4 +535,5 @@ def load_model_resources() -> ModelResources:
         threshold_metadata=threshold_metadata,
         positive_class_index=positive_class_index,
         rul=rul_resources,
+        anomaly=anomaly_resources,
     )

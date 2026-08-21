@@ -41,6 +41,7 @@ class HealthResponse(BaseModel):
     model_loaded: bool
     failure_model_loaded: bool
     rul_model_loaded: bool
+    anomaly_model_loaded: bool
 
 
 class ModelInfoResponse(BaseModel):
@@ -120,4 +121,88 @@ class RULModelInfoResponse(BaseModel):
     known_limitations: list[str]
     output_interpretation: str
     development_warning: str
+    disclaimer: str
+
+
+class AnomalyObservation(BaseModel):
+    """One strict raw sensor observation in a chronological anomaly trajectory."""
+
+    model_config = ConfigDict(extra="forbid", strict=True, allow_inf_nan=False)
+
+    cycle: int = Field(gt=0)
+    sensor_2: float
+    sensor_3: float
+    sensor_4: float
+    sensor_7: float
+    sensor_8: float
+    sensor_9: float
+    sensor_11: float
+    sensor_12: float
+    sensor_13: float
+    sensor_14: float
+    sensor_15: float
+    sensor_17: float
+    sensor_20: float
+    sensor_21: float
+
+
+class AnomalyPredictionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True, allow_inf_nan=False)
+
+    unit_id: StrictStr | StrictInt | None = None
+    observations: list[AnomalyObservation] = Field(min_length=1)
+
+
+class SensorDeviationResponse(BaseModel):
+    sensor: str
+    current_value: float
+    reference_mean: float
+    standardized_deviation: float
+    direction: Literal["above_normal", "below_normal"]
+
+
+class AnomalyPredictionResponse(BaseModel):
+    unit_id: str | int | None
+    current_anomaly_score: float
+    anomaly_percentile: float = Field(ge=0, le=100)
+    threshold_percentile: float = Field(ge=0, le=100)
+    raw_threshold: float
+    current_threshold_exceeded: bool
+    recent_window_size: int = Field(ge=1, le=5)
+    recent_exceedance_pattern: list[bool]
+    recent_exceedance_count: int = Field(ge=0, le=5)
+    persistence_required_count: int
+    persistence_window_size: int
+    persistence_status: Literal["available", "insufficient_history"]
+    alert_active: bool
+    history_cycle_count: int = Field(ge=1)
+    top_sensor_deviations: list[SensorDeviationResponse]
+    sensor_context_label: str
+    model_version: str
+    dataset: str
+    development_stage: Literal[True]
+    warning: str
+    disclaimer: str
+
+
+class AnomalyModelInfoResponse(BaseModel):
+    model_name: str
+    model_version: str
+    model_family: str
+    dataset: str
+    dataset_subset: str
+    predictor_count: int
+    normal_reference_definition: str
+    threshold_percentile: float
+    raw_threshold: float
+    persistence_window: int
+    persistence_required_count: int
+    minimum_persistence_history: int
+    repeated_split_stability: dict[str, float]
+    healthy_alert_burden: dict[str, float]
+    critical_alert_coverage: dict[str, float]
+    lead_time_findings: dict[str, float]
+    known_limitations: list[str]
+    output_interpretation: str
+    warning: str
     disclaimer: str
