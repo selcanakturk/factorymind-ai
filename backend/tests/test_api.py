@@ -35,6 +35,7 @@ def test_health_succeeds_and_model_is_loaded(client):
         "failure_model_loaded": True,
         "rul_model_loaded": True,
         "anomaly_model_loaded": True,
+        "visual_quality_model_loaded": True,
     }
 
 

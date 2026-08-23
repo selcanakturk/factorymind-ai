@@ -9,5 +9,6 @@ pytest
 fastapi
 uvicorn
 httpx
+python-multipart
 torch==2.13.0
 torchvision==0.28.0

@@ -42,6 +42,7 @@ class HealthResponse(BaseModel):
     failure_model_loaded: bool
     rul_model_loaded: bool
     anomaly_model_loaded: bool
+    visual_quality_model_loaded: bool
 
 
 class ModelInfoResponse(BaseModel):
@@ -206,3 +207,51 @@ class AnomalyModelInfoResponse(BaseModel):
     output_interpretation: str
     warning: str
     disclaimer: str
+
+
+class VisualQualityPredictionResponse(BaseModel):
+    visual_anomaly_score: float = Field(ge=0)
+    threshold: float = Field(gt=0)
+    threshold_quantile: float = Field(gt=0, lt=1)
+    anomaly_detected: bool
+    quality_status: Literal["No visual anomaly detected", "Visual anomaly detected"]
+    category: Literal["zipper"]
+    model_version: str
+    dataset: str
+    original_width: int = Field(ge=32)
+    original_height: int = Field(ge=32)
+    model_input_width: int
+    model_input_height: int
+    anomaly_map_available: Literal[True]
+    raw_anomaly_map_16x16: list[list[float]]
+    anomaly_map_image_base64: str
+    anomaly_map_label: Literal["Model anomaly map"]
+    warning: str
+    disclaimer: str
+
+
+class VisualQualityModelInfoResponse(BaseModel):
+    model_name: str
+    model_version: str
+    model_family: str
+    dataset: str
+    category: str
+    input_size: list[int]
+    accepted_image_formats: list[str]
+    minimum_source_dimensions: list[int]
+    backbone: str
+    backbone_weights: str
+    feature_layers: list[str]
+    patch_grid: list[int]
+    coreset_size: int
+    threshold_policy: str
+    threshold: float
+    benchmark_image_metrics: dict[str, float]
+    benchmark_pixel_metrics: dict[str, float | None]
+    false_positive_false_negative_tradeoff: str
+    known_limitations: list[str]
+    score_interpretation: str
+    warning: str
+    disclaimer: str
+    licensing_note: str
+    runtime_device: str

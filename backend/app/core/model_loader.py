@@ -3,13 +3,18 @@
 from dataclasses import dataclass
 import json
 import math
+import platform
 from pathlib import Path
 from typing import Any
+from threading import Lock
 
 import joblib
 import numpy as np
 import pandas as pd
 import sklearn
+import torch
+import torchvision
+from PIL import Image
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.ensemble import IsolationForest
 from sklearn.pipeline import Pipeline
@@ -40,6 +45,23 @@ from src.rul_features import (
     TEMPORAL_FEATURE_DEFINITIONS,
 )
 from src.rul_pipeline import FROZEN_RANDOM_FOREST_HYPERPARAMETERS
+from src.visual_features import (
+    VISUAL_CATEGORY,
+    VISUAL_EMBEDDING_DIM,
+    VISUAL_FEATURE_LAYERS,
+    VISUAL_INPUT_SIZE,
+    VISUAL_MIN_DIMENSION,
+    VISUAL_PATCH_COUNT,
+    VISUAL_PATCH_GRID,
+)
+from src.visual_pipeline import (
+    VISUAL_MODEL_VERSION,
+    VISUAL_THRESHOLD_QUANTILE,
+    VisualModelBundle,
+    VisualRuntime,
+    create_visual_runtime,
+    validate_visual_bundle,
+)
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -56,6 +78,8 @@ RUL_METADATA_PATH = (
 )
 ANOMALY_MODEL_PATH = PROJECT_ROOT / "models" / "factorymind_anomaly_model_v1.joblib"
 ANOMALY_METADATA_PATH = PROJECT_ROOT / "models" / "factorymind_anomaly_model_v1.metadata.json"
+VISUAL_MODEL_PATH = PROJECT_ROOT / "models" / "factorymind_visual_quality_model_v1.joblib"
+VISUAL_METADATA_PATH = PROJECT_ROOT / "models" / "factorymind_visual_quality_model_v1.metadata.json"
 
 
 class ArtifactLoadError(RuntimeError):
@@ -79,6 +103,15 @@ class AnomalyModelResources:
 
 
 @dataclass(frozen=True)
+class VisualModelResources:
+    """Validated visual runtime loaded once at application startup."""
+
+    runtime: VisualRuntime
+    metadata: dict[str, Any]
+    inference_lock: Lock
+
+
+@dataclass(frozen=True)
 class ModelResources:
     """Artifacts loaded once for use throughout the application process."""
 
@@ -88,6 +121,7 @@ class ModelResources:
     positive_class_index: int
     rul: RULModelResources | None = None
     anomaly: AnomalyModelResources | None = None
+    visual_quality: VisualModelResources | None = None
 
     @property
     def thresholds(self) -> dict[str, float]:
@@ -503,6 +537,141 @@ def load_anomaly_resources() -> AnomalyModelResources:
     return AnomalyModelResources(bundle=bundle, metadata=metadata)
 
 
+def _validate_visual_metadata(metadata: dict[str, Any]) -> None:
+    artifact_name = "Visual quality metadata"
+    expected_strings = {
+        "model_name": "FactoryMind Visual Quality Inspection",
+        "model_version": VISUAL_MODEL_VERSION,
+        "model_family": "PatchCore-style nearest-neighbor anomaly detection",
+        "dataset": "MVTec AD",
+        "dataset_category": VISUAL_CATEGORY,
+        "training_protocol": "normal-only",
+        "input_color_mode": "RGB",
+        "rgba_handling": "alpha composite over opaque white, then RGB",
+        "resize_method": "bilinear",
+        "backbone": "ResNet18",
+        "backbone_weights": "IMAGENET1K_V1",
+        "nearest_neighbor_algorithm": "brute",
+        "nearest_neighbor_metric": "euclidean",
+        "patch_score_method": "nearest coreset Euclidean distance",
+        "image_score_method": "maximum of 256 patch scores",
+    }
+    for field, expected in expected_strings.items():
+        if _require_nonempty_string(metadata, field, artifact_name) != expected:
+            raise ArtifactLoadError(
+                f"Visual quality metadata field {field!r} is incompatible with the frozen specification."
+            )
+    for field in [
+        "dataset_license_note", "coreset_method", "threshold_method",
+        "output_interpretation", "warning", "disclaimer",
+    ]:
+        _require_nonempty_string(metadata, field, artifact_name)
+    expected_numbers = {
+        "reference_image_count": 192,
+        "development_normal_count": 48,
+        "test_good_count": 32,
+        "test_anomaly_count": 119,
+        "coreset_projection_dim": 16,
+        "coreset_seed": 42,
+        "coreset_retention_ratio": 0.05,
+        "coreset_patch_count": 2458,
+        "patch_embedding_dim": VISUAL_EMBEDDING_DIM,
+        "patches_per_image": VISUAL_PATCH_COUNT,
+        "full_reference_patch_count": 49_152,
+        "threshold_quantile": VISUAL_THRESHOLD_QUANTILE,
+    }
+    for field, expected in expected_numbers.items():
+        if _require_finite_number(metadata, field, artifact_name) != expected:
+            raise ArtifactLoadError(
+                f"Visual quality metadata field {field!r} does not match frozen value {expected}."
+            )
+    list_contracts = {
+        "accepted_image_formats": ["JPEG", "PNG"],
+        "minimum_source_dimensions": [VISUAL_MIN_DIMENSION, VISUAL_MIN_DIMENSION],
+        "input_size": list(VISUAL_INPUT_SIZE),
+        "feature_layers": list(VISUAL_FEATURE_LAYERS),
+        "feature_map_grid": list(VISUAL_PATCH_GRID),
+    }
+    for field, expected in list_contracts.items():
+        if metadata.get(field) != expected:
+            raise ArtifactLoadError(
+                f"Visual quality metadata field {field!r} does not match the frozen contract."
+            )
+    if metadata.get("antialias") is not True or metadata.get("backbone_frozen") is not True:
+        raise ArtifactLoadError("Visual quality antialias/backbone-frozen contract is incompatible.")
+    normalization = metadata.get("normalization")
+    if not isinstance(normalization, dict) or list(normalization.get("mean", [])) != [0.485, 0.456, 0.406] or list(normalization.get("std", [])) != [0.229, 0.224, 0.225]:
+        raise ArtifactLoadError("Visual quality normalization does not match ImageNet contract.")
+    threshold = _require_finite_number(metadata, "threshold_raw_score", artifact_name)
+    display_low = _require_finite_number(metadata, "display_scale_low", artifact_name)
+    display_high = _require_finite_number(metadata, "display_scale_high", artifact_name)
+    if not math.isclose(threshold, 0.45468712896108615, rel_tol=0, abs_tol=5e-9):
+        raise ArtifactLoadError("Visual quality threshold does not match the frozen value.")
+    if display_low >= display_high or not math.isclose(display_high, threshold, rel_tol=0, abs_tol=1e-12):
+        raise ArtifactLoadError("Visual quality display scale is incompatible with the threshold.")
+    for field in ["notebook_16_image_level_metrics", "notebook_16_pixel_level_metrics"]:
+        if not isinstance(metadata.get(field), dict) or not metadata[field]:
+            raise ArtifactLoadError(f"Visual quality metadata field {field!r} must be a non-empty object.")
+    if not _require_string_list(metadata, "known_limitations", artifact_name):
+        raise ArtifactLoadError("Visual quality known limitations must not be empty.")
+    runtime_versions = {
+        "python_version": platform.python_version(),
+        "torch_version": torch.__version__,
+        "torchvision_version": torchvision.__version__,
+        "numpy_version": np.__version__,
+        "pillow_version": Image.__version__,
+        "sklearn_version": sklearn.__version__,
+    }
+    for field, runtime_version in runtime_versions.items():
+        recorded = _require_nonempty_string(metadata, field, artifact_name)
+        if recorded != runtime_version:
+            raise ArtifactLoadError(
+                f"Visual quality artifact {field} {recorded!r} is incompatible with runtime {runtime_version!r}."
+            )
+
+
+def _validate_visual_bundle(bundle: Any, metadata: dict[str, Any]) -> None:
+    if not isinstance(bundle, VisualModelBundle):
+        raise ArtifactLoadError("Loaded visual artifact must be a VisualModelBundle.")
+    try:
+        validate_visual_bundle(bundle)
+    except (TypeError, ValueError) as exc:
+        raise ArtifactLoadError("Loaded visual model bundle is malformed or incompatible.") from exc
+    if bundle.model_version != metadata["model_version"] or bundle.category != metadata["dataset_category"]:
+        raise ArtifactLoadError("Visual bundle identity does not match metadata.")
+    if not math.isclose(bundle.threshold, float(metadata["threshold_raw_score"]), rel_tol=0, abs_tol=1e-12):
+        raise ArtifactLoadError("Visual bundle and metadata thresholds do not match.")
+    if not math.isclose(bundle.display_low, float(metadata["display_scale_low"]), rel_tol=0, abs_tol=1e-12):
+        raise ArtifactLoadError("Visual bundle and metadata display scales do not match.")
+    if not isinstance(bundle.backbone_state_dict, dict) or not bundle.backbone_state_dict:
+        raise ArtifactLoadError("Visual bundle backbone state is missing.")
+
+
+def _visual_device() -> torch.device:
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    if torch.backends.mps.is_available():
+        return torch.device("mps")
+    return torch.device("cpu")
+
+
+def load_visual_resources() -> VisualModelResources:
+    if not VISUAL_MODEL_PATH.is_file():
+        raise ArtifactLoadError(f"Required visual model artifact is missing: {VISUAL_MODEL_PATH}")
+    try:
+        bundle = joblib.load(VISUAL_MODEL_PATH)
+    except Exception as exc:
+        raise ArtifactLoadError(f"Could not load visual model artifact: {VISUAL_MODEL_PATH}") from exc
+    metadata = _load_json(VISUAL_METADATA_PATH, "visual quality metadata")
+    _validate_visual_metadata(metadata)
+    _validate_visual_bundle(bundle, metadata)
+    try:
+        runtime = create_visual_runtime(bundle, device=_visual_device())
+    except Exception as exc:
+        raise ArtifactLoadError("Visual quality runtime could not be constructed from the artifact.") from exc
+    return VisualModelResources(runtime=runtime, metadata=metadata, inference_lock=Lock())
+
+
 def load_model_resources() -> ModelResources:
     """Load and validate all inference artifacts from the project model directory."""
     if not MODEL_PATH.is_file():
@@ -528,6 +697,7 @@ def load_model_resources() -> ModelResources:
     positive_class_index = _resolve_positive_class_index(model)
     rul_resources = load_rul_resources()
     anomaly_resources = load_anomaly_resources()
+    visual_resources = load_visual_resources()
 
     return ModelResources(
         model=model,
@@ -536,4 +706,5 @@ def load_model_resources() -> ModelResources:
         positive_class_index=positive_class_index,
         rul=rul_resources,
         anomaly=anomaly_resources,
+        visual_quality=visual_resources,
     )

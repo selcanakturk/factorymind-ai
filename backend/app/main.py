@@ -1,17 +1,22 @@
 """FactoryMind AI FastAPI application."""
 
 from contextlib import asynccontextmanager
+import logging
+from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request, status
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
+from starlette.datastructures import UploadFile as StarletteUploadFile
 
 from .core.model_loader import (
     ArtifactLoadError,
     AnomalyModelResources,
     ModelResources,
     RULModelResources,
+    VisualModelResources,
     load_model_resources,
 )
 from .schemas import (
@@ -25,6 +30,8 @@ from .schemas import (
     AnomalyModelInfoResponse,
     AnomalyPredictionRequest,
     AnomalyPredictionResponse,
+    VisualQualityModelInfoResponse,
+    VisualQualityPredictionResponse,
 )
 from .services.anomaly_prediction_service import (
     AnomalyInputError,
@@ -37,6 +44,21 @@ from .services.rul_prediction_service import (
     RULPredictionError,
     RULPredictionService,
 )
+from .services.visual_prediction_service import (
+    VisualInputError,
+    VisualPredictionError,
+    VisualPredictionService,
+)
+
+
+logger = logging.getLogger(__name__)
+VISUAL_MAX_UPLOAD_BYTES = 8 * 1024 * 1024
+VISUAL_UPLOAD_CHUNK_BYTES = 1024 * 1024
+VISUAL_MIME_BY_SUFFIX = {
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+}
 
 
 @asynccontextmanager
@@ -53,7 +75,7 @@ app = FastAPI(
     description=(
         "Development-stage machine intelligence for calibrated failure risk and "
         "trajectory-level remaining useful life estimation, and nonprobabilistic "
-        "anomaly condition monitoring."
+        "anomaly condition monitoring and visual quality inspection."
     ),
     version="1.0.0",
     lifespan=lifespan,
@@ -121,6 +143,16 @@ def get_anomaly_resources(request: Request) -> AnomalyModelResources:
     return resources.anomaly
 
 
+def get_visual_resources(request: Request) -> VisualModelResources:
+    resources = get_resources(request)
+    if resources.visual_quality is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Visual quality model resources are unavailable.",
+        )
+    return resources.visual_quality
+
+
 @app.get("/health", response_model=HealthResponse, tags=["system"])
 def health(request: Request) -> HealthResponse:
     resources = getattr(request.app.state, "model_resources", None)
@@ -132,7 +164,8 @@ def health(request: Request) -> HealthResponse:
     failure_ready = resources.model is not None
     rul_ready = resources.rul is not None
     anomaly_ready = resources.anomaly is not None
-    if not failure_ready or not rul_ready or not anomaly_ready:
+    visual_ready = resources.visual_quality is not None
+    if not failure_ready or not rul_ready or not anomaly_ready or not visual_ready:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Model resources are unavailable.",
@@ -144,6 +177,45 @@ def health(request: Request) -> HealthResponse:
         failure_model_loaded=failure_ready,
         rul_model_loaded=rul_ready,
         anomaly_model_loaded=anomaly_ready,
+        visual_quality_model_loaded=visual_ready,
+    )
+
+
+@app.get(
+    "/model/visual-quality/info",
+    response_model=VisualQualityModelInfoResponse,
+    tags=["model"],
+    summary="Get the frozen visual-quality model contract",
+    description="Returns curated PatchCore-style zipper metadata without exposing artifact internals.",
+)
+def visual_quality_model_info(request: Request) -> VisualQualityModelInfoResponse:
+    resources = get_visual_resources(request)
+    metadata = resources.metadata
+    return VisualQualityModelInfoResponse(
+        model_name=metadata["model_name"],
+        model_version=metadata["model_version"],
+        model_family=metadata["model_family"],
+        dataset=metadata["dataset"],
+        category=metadata["dataset_category"],
+        input_size=metadata["input_size"],
+        accepted_image_formats=metadata["accepted_image_formats"],
+        minimum_source_dimensions=metadata["minimum_source_dimensions"],
+        backbone=metadata["backbone"],
+        backbone_weights=metadata["backbone_weights"],
+        feature_layers=metadata["feature_layers"],
+        patch_grid=metadata["feature_map_grid"],
+        coreset_size=metadata["coreset_patch_count"],
+        threshold_policy=metadata["threshold_method"],
+        threshold=metadata["threshold_raw_score"],
+        benchmark_image_metrics=metadata["notebook_16_image_level_metrics"],
+        benchmark_pixel_metrics=metadata["notebook_16_pixel_level_metrics"],
+        false_positive_false_negative_tradeoff=metadata["false_positive_false_negative_tradeoff"],
+        known_limitations=metadata["known_limitations"],
+        score_interpretation=metadata["output_interpretation"],
+        warning=metadata["warning"],
+        disclaimer=metadata["disclaimer"],
+        licensing_note=metadata["dataset_license_note"],
+        runtime_device=str(resources.runtime.device),
     )
 
 
@@ -304,3 +376,75 @@ def predict_anomaly(prediction_request: AnomalyPredictionRequest, request: Reque
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     except AnomalyPredictionError as exc:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Anomaly prediction could not be completed.") from exc
+
+
+async def _read_visual_upload(upload: UploadFile) -> bytes:
+    if not upload.filename:
+        raise HTTPException(status_code=422, detail="Uploaded image filename is required.")
+    suffix = Path(upload.filename).suffix.lower()
+    expected_mime = VISUAL_MIME_BY_SUFFIX.get(suffix)
+    if expected_mime is None:
+        raise HTTPException(status_code=422, detail="Only .jpg, .jpeg, and .png files are accepted.")
+    if upload.content_type not in {"image/jpeg", "image/png"}:
+        raise HTTPException(status_code=422, detail="Only JPEG and PNG image MIME types are accepted.")
+    if upload.content_type != expected_mime:
+        raise HTTPException(status_code=422, detail="Image filename extension and MIME type do not match.")
+    content = bytearray()
+    try:
+        while True:
+            chunk = await upload.read(VISUAL_UPLOAD_CHUNK_BYTES)
+            if not chunk:
+                break
+            content.extend(chunk)
+            if len(content) > VISUAL_MAX_UPLOAD_BYTES:
+                raise HTTPException(
+                    status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                    detail="Uploaded image exceeds the 8 MB limit.",
+                )
+    finally:
+        await upload.close()
+    if not content:
+        raise HTTPException(status_code=422, detail="Uploaded image is empty.")
+    return bytes(content)
+
+
+@app.post(
+    "/predict/visual-quality",
+    response_model=VisualQualityPredictionResponse,
+    tags=["prediction"],
+    summary="Inspect one zipper image for visual anomalies",
+    description=(
+        "Accepts one JPEG or PNG zipper inspection image up to 8 MB. Returns a "
+        "nonprobabilistic Visual Anomaly Score, development threshold decision, raw "
+        "16×16 patch-distance map, and base64 PNG Model anomaly map. It does not "
+        "classify defect type or provide certified quality control."
+    ),
+    responses={
+        413: {"description": "Image exceeds the upload limit"},
+        422: {"description": "Invalid, corrupt, unsupported, or too-small image"},
+        503: {"description": "Visual quality model resources unavailable"},
+        500: {"description": "Unexpected visual inference failure"},
+    },
+)
+async def predict_visual_quality(
+    request: Request,
+    file: UploadFile = File(..., description="One JPEG or PNG zipper inspection image"),
+) -> VisualQualityPredictionResponse:
+    resources = get_visual_resources(request)
+    form = await request.form()
+    upload_count = sum(
+        isinstance(value, StarletteUploadFile) for _, value in form.multi_items()
+    )
+    if upload_count != 1:
+        raise HTTPException(status_code=422, detail="Exactly one image file is required.")
+    payload = await _read_visual_upload(file)
+    try:
+        return await run_in_threadpool(
+            VisualPredictionService(resources).predict, payload, file.filename
+        )
+    except VisualInputError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except VisualPredictionError as exc:
+        raise HTTPException(
+            status_code=500, detail="Visual quality prediction could not be completed."
+        ) from exc
