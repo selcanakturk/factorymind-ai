@@ -8,6 +8,7 @@ interface Props {
   onOpenAnalysis: () => void;
   onOpenRul: () => void;
   onOpenAnomaly: () => void;
+  onOpenQuality: () => void;
   onRetry: () => void;
 }
 
@@ -26,6 +27,7 @@ export function OverviewPage({
   onOpenAnalysis,
   onOpenRul,
   onOpenAnomaly,
+  onOpenQuality,
   onRetry,
 }: Props) {
   return (
@@ -36,7 +38,7 @@ export function OverviewPage({
           <h1>Machine intelligence,<br />made operational.</h1>
           <p className="page-lead">
             Evaluate failure risk, remaining useful life, and unusual sensor
-            behavior with three development-stage machine-learning engines.
+            behavior and visual quality with four development-stage machine-learning engines.
           </p>
         </div>
         <button className="primary-button" onClick={onOpenAnalysis}>
@@ -109,10 +111,11 @@ export function OverviewPage({
         </article>
       </section>
 
-      <section className="future-strip" aria-label="Future modules">
+      <section className="future-strip four-modules" aria-label="Available machine-learning modules">
+        <button className="future-item available-module" onClick={onOpenAnalysis}><span>FR</span><div><strong>Failure Risk</strong><small>{health?.failure_model_loaded ? "Available · Open module" : "Module unavailable"}</small></div></button>
         <button className="future-item available-module" onClick={onOpenRul}><span>RUL</span><div><strong>Remaining Useful Life</strong><small>Available · Open module</small></div></button>
         <button className="future-item available-module" onClick={onOpenAnomaly}><span>AD</span><div><strong>Anomaly Detection</strong><small>{health?.anomaly_model_loaded ? "Available · Open module" : "Module unavailable"}</small></div></button>
-        <div className="future-item"><span>QI</span><div><strong>Quality Inspection</strong><small>Coming Soon</small></div></div>
+        <button className="future-item available-module" onClick={onOpenQuality}><span>VQI</span><div><strong>Visual Quality Inspection</strong><small>{health?.visual_quality_model_loaded ? "Available · Open module" : "Module unavailable"}</small></div></button>
       </section>
     </div>
   );

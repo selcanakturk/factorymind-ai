@@ -9,6 +9,8 @@ import type {
   RULModelInfoResponse,
   RULPredictionRequest,
   RULPredictionResponse,
+  VisualQualityModelInfoResponse,
+  VisualQualityPredictionResponse,
 } from "../types/api";
 
 const API_BASE_URL = (
@@ -30,7 +32,9 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   try {
     response = await fetch(`${API_BASE_URL}${path}`, {
       ...options,
-      headers: { "Content-Type": "application/json", ...options?.headers },
+      headers: options?.body instanceof FormData
+        ? options.headers
+        : { "Content-Type": "application/json", ...options?.headers },
     });
   } catch {
     throw new ApiError(
@@ -66,6 +70,7 @@ export const factoryMindApi = {
   modelInfo: () => request<ModelInfoResponse>("/model/info"),
   getRulModelInfo: () => request<RULModelInfoResponse>("/model/rul/info"),
   getAnomalyModelInfo: () => request<AnomalyModelInfoResponse>("/model/anomaly/info"),
+  getVisualQualityModelInfo: () => request<VisualQualityModelInfoResponse>("/model/visual-quality/info"),
   predictFailure: (payload: FailurePredictionRequest) =>
     request<FailurePredictionResponse>("/predict/failure", {
       method: "POST",
@@ -81,4 +86,12 @@ export const factoryMindApi = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+  predictVisualQuality: (file: File) => {
+    const formData = new FormData();
+    formData.append("file", file, file.name);
+    return request<VisualQualityPredictionResponse>("/predict/visual-quality", {
+      method: "POST",
+      body: formData,
+    });
+  },
 };

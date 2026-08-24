@@ -11,6 +11,55 @@ export interface HealthResponse {
   failure_model_loaded: boolean;
   rul_model_loaded: boolean;
   anomaly_model_loaded: boolean;
+  visual_quality_model_loaded: boolean;
+}
+
+export interface VisualQualityPredictionResponse {
+  visual_anomaly_score: number;
+  threshold: number;
+  threshold_quantile: number;
+  anomaly_detected: boolean;
+  quality_status: "No visual anomaly detected" | "Visual anomaly detected";
+  category: "zipper";
+  model_version: string;
+  dataset: string;
+  original_width: number;
+  original_height: number;
+  model_input_width: number;
+  model_input_height: number;
+  anomaly_map_available: true;
+  raw_anomaly_map_16x16: number[][];
+  anomaly_map_image_base64: string;
+  anomaly_map_label: "Model anomaly map";
+  warning: string;
+  disclaimer: string;
+}
+
+export interface VisualQualityModelInfoResponse {
+  model_name: string;
+  model_version: string;
+  model_family: string;
+  dataset: string;
+  category: string;
+  input_size: number[];
+  accepted_image_formats: string[];
+  minimum_source_dimensions: number[];
+  backbone: string;
+  backbone_weights: string;
+  feature_layers: string[];
+  patch_grid: number[];
+  coreset_size: number;
+  threshold_policy: string;
+  threshold: number;
+  benchmark_image_metrics: Record<string, number>;
+  benchmark_pixel_metrics: Record<string, number | null>;
+  false_positive_false_negative_tradeoff: string;
+  known_limitations: string[];
+  score_interpretation: string;
+  warning: string;
+  disclaimer: string;
+  licensing_note: string;
+  runtime_device: string;
 }
 
 export interface AnomalyObservation {

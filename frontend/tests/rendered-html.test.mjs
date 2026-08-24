@@ -14,11 +14,13 @@ test("production build contains the FactoryMind application entry", async () => 
   assert.match(html, /assets\/index-[^"]+\.css/);
 });
 
-test("RUL and anomaly navigation are active while Quality Inspection remains disabled", async () => {
+test("all four ML modules including Quality Inspection have active navigation", async () => {
   const source = await projectFile("src/components/FactoryMindApp.tsx");
   assert.match(source, /\["rul", "03", "Remaining Useful Life"\]/);
   assert.match(source, /\["anomaly", "04", "Anomaly Detection"\]/);
-  assert.match(source, /disabled-nav[\s\S]*Quality Inspection/);
+  assert.match(source, /\["quality", "05", "Quality Inspection"\]/);
+  assert.match(source, /\["model", "06", "Model Info"\]/);
+  assert.doesNotMatch(source, /disabled-nav[\s\S]*Quality Inspection/);
 });
 
 test("central API service owns both RUL endpoints", async () => {
@@ -129,14 +131,77 @@ test("anomaly persistence states and policy text are rendered from backend field
   assert.match(source, /result\.persistence_window_size/);
 });
 
-test("Overview and Model Info expose the anomaly module without promoting Quality Inspection", async () => {
+test("Overview and Model Info expose anomaly and visual quality as active modules", async () => {
   const overview = await projectFile("src/pages/OverviewPage.tsx");
   const modelInfo = await projectFile("src/pages/ModelInfoPage.tsx");
   assert.match(overview, /anomaly_model_loaded/);
   assert.match(overview, /Anomaly Detection/);
-  assert.match(overview, /Quality Inspection[\s\S]*Coming Soon/);
+  assert.match(overview, /visual_quality_model_loaded/);
+  assert.match(overview, /Visual Quality Inspection/);
+  assert.doesNotMatch(overview, /Quality Inspection[\s\S]*Coming Soon/);
   assert.match(modelInfo, /Module 03 · Anomaly Detection/);
   assert.match(modelInfo, /anomalyModelInfo\.known_limitations/);
+  assert.match(modelInfo, /Module 04 · Visual Quality Inspection/);
+  assert.match(modelInfo, /visualModelInfo\.benchmark_image_metrics\.roc_auc/);
+  assert.match(modelInfo, /visualModelInfo\.benchmark_pixel_metrics\.average_precision/);
+});
+
+test("central API service owns visual prediction and model-info endpoints", async () => {
+  const source = await projectFile("src/services/api.ts");
+  assert.match(source, /getVisualQualityModelInfo:[\s\S]*\/model\/visual-quality\/info/);
+  assert.match(source, /predictVisualQuality:[\s\S]*new FormData\(\)/);
+  assert.match(source, /formData\.append\("file", file, file\.name\)/);
+  assert.match(source, /\/predict\/visual-quality/);
+  assert.match(source, /options\?\.body instanceof FormData/);
+});
+
+test("visual API types match backend score, map, and health fields", async () => {
+  const source = await projectFile("src/types/api.ts");
+  for (const field of ["visual_anomaly_score", "threshold_quantile", "anomaly_detected", "quality_status", "raw_anomaly_map_16x16", "anomaly_map_image_base64", "warning", "disclaimer", "visual_quality_model_loaded"]) {
+    assert.match(source, new RegExp(field));
+  }
+  assert.doesNotMatch(source, /defect_probability|probability_defective|certified_pass|certified_fail/);
+});
+
+test("Quality Inspection page validates files and preserves an accessible preview flow", async () => {
+  const source = await projectFile("src/pages/QualityInspectionPage.tsx");
+  assert.match(source, /MAX_UPLOAD_BYTES = 8 \* 1024 \* 1024/);
+  assert.match(source, /ALLOWED_EXTENSIONS = new Set\(\["jpg", "jpeg", "png"\]\)/);
+  assert.match(source, /ALLOWED_MIME_TYPES = new Set\(\["image\/jpeg", "image\/png"\]\)/);
+  assert.match(source, /file\.size === 0/);
+  assert.match(source, /file\.size > MAX_UPLOAD_BYTES/);
+  assert.match(source, /URL\.createObjectURL\(file\)/);
+  assert.match(source, /URL\.revokeObjectURL/);
+  assert.match(source, /Replace image/);
+  assert.match(source, /Remove image/);
+  assert.match(source, /aria-live="assertive"/);
+});
+
+test("Quality Inspection renders normal and anomalous backend-authoritative concepts", async () => {
+  const source = await projectFile("src/pages/QualityInspectionPage.tsx");
+  const normalFixture = { visual_anomaly_score: 0.3605263, anomaly_detected: false, quality_status: "No visual anomaly detected" };
+  const anomalousFixture = { visual_anomaly_score: 0.4861785, anomaly_detected: true, quality_status: "Visual anomaly detected" };
+  assert.equal(normalFixture.quality_status, "No visual anomaly detected");
+  assert.equal(anomalousFixture.quality_status, "Visual anomaly detected");
+  assert.match(source, /result\.quality_status/);
+  assert.match(source, /result\.visual_anomaly_score\.toFixed\(4\)/);
+  assert.match(source, /result\.threshold\.toFixed\(4\)/);
+  assert.match(source, /data:image\/png;base64/);
+  assert.match(source, /Model anomaly map/);
+  assert.match(source, /result\.warning/);
+  assert.match(source, /result\.disclaimer/);
+  assert.match(source, /not probability or confidence/);
+  assert.doesNotMatch(source, /defect probability|Certified Good|Certified Defective|>PASS<|>FAIL</i);
+});
+
+test("Quality Inspection handles API loading and status-specific errors", async () => {
+  const source = await projectFile("src/pages/QualityInspectionPage.tsx");
+  assert.match(source, /error\.status === 422/);
+  assert.match(source, /error\.status === 413/);
+  assert.match(source, /error\.status === 503/);
+  assert.match(source, /error\.status === 500/);
+  assert.match(source, /disabled=\{loading \|\| !selected \|\| !modelAvailable\}/);
+  assert.match(source, /role="status"/);
 });
 
 test("RUL page supports cycle add, removal, and both demo history lengths", async () => {
