@@ -187,7 +187,7 @@ test("Quality Inspection renders normal and anomalous backend-authoritative conc
   assert.match(source, /result\.visual_anomaly_score\.toFixed\(4\)/);
   assert.match(source, /result\.threshold\.toFixed\(4\)/);
   assert.match(source, /data:image\/png;base64/);
-  assert.match(source, /Model anomaly map/);
+  assert.match(source, /Model anomaly overlay/);
   assert.match(source, /result\.warning/);
   assert.match(source, /result\.disclaimer/);
   assert.match(source, /not probability or confidence/);
@@ -202,6 +202,35 @@ test("Quality Inspection handles API loading and status-specific errors", async 
   assert.match(source, /error\.status === 500/);
   assert.match(source, /disabled=\{loading \|\| !selected \|\| !modelAvailable\}/);
   assert.match(source, /role="status"/);
+});
+
+test("Quality Inspection adds a Canvas overlay without changing inference semantics", async () => {
+  const source = await projectFile("src/pages/QualityInspectionPage.tsx");
+  assert.match(source, /ModelAnomalyOverlay/);
+  assert.match(source, /Model anomaly overlay/);
+  assert.match(source, /aria-label="Model anomaly overlay for the uploaded zipper image"/);
+  assert.match(source, /activeContext\.drawImage\(original, 0, 0, width, height\)/);
+  assert.match(source, /heatmapContext\.drawImage\(anomalyMap, 0, 0, width, height\)/);
+  assert.match(source, /anomalyMap\.src = `data:image\/png;base64,\$\{anomalyMapBase64\}`/);
+  assert.match(source, /const intensity = pixels\[index\] \/ 255/);
+  assert.match(source, /intensity < 0\.12/);
+  assert.match(source, /activeContext\.clearRect/);
+  assert.match(source, /cancelled = true/);
+  assert.match(source, /Overlay unavailable\. The original image, score, threshold, and quality status remain available/);
+  assert.match(source, /This visualization does not confirm a defect boundary, cause, or severity/);
+  assert.equal((source.match(/factoryMindApi\.predictVisualQuality/g) ?? []).length, 1);
+  assert.doesNotMatch(source, /anomaly-map-frame/);
+  assert.doesNotMatch(source, /alt="Model anomaly map/);
+  assert.doesNotMatch(source, /<figcaption>\{result\.anomaly_map_label\}<\/figcaption>/);
+  assert.doesNotMatch(source, /Math\.min\(\.\.\.|Math\.max\(\.\.\.|minMax|defect probability|confidence score/i);
+});
+
+test("overlay layout supports desktop comparison and mobile stacking", async () => {
+  const styles = await projectFile("src/styles.css");
+  assert.match(styles, /\.image-comparison-primary\{grid-template-columns:repeat\(2/);
+  assert.match(styles, /\.overlay-frame canvas\{display:block;width:100%;height:100%;object-fit:contain\}/);
+  assert.match(styles, /@media\(max-width:700px\)\{\.image-comparison-primary\{grid-template-columns:1fr\}/);
+  assert.match(styles, /\.overlay-legend\{display:grid/);
 });
 
 test("RUL page supports cycle add, removal, and both demo history lengths", async () => {
