@@ -37,6 +37,12 @@ def test_all_fixture_artifacts_present(tmp_path):
     assert prepare_artifacts(root) == []
 
 
+def test_files_only_validation_succeeds_without_runtime_loading(tmp_path):
+    root, manifest = write_fixture(tmp_path)
+    assert inspect_artifacts(root, manifest) == []
+    assert prepare_artifacts(root, files_only=True) == []
+
+
 def test_missing_versioned_artifact_is_reported_without_changes(tmp_path):
     root, manifest = write_fixture(tmp_path)
     target = root / "models" / "tabular.joblib"

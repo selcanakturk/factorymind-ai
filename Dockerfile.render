@@ -2,7 +2,7 @@
 
 # Render requires prebuilt images to target linux/amd64. Pin the verified Python
 # runtime so serialized model compatibility does not depend on provider defaults.
-FROM --platform=linux/amd64 python:3.13.2-slim
+FROM python:3.13.2-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -11,7 +11,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 COPY requirements-runtime.txt ./requirements-runtime.txt
-RUN python -m pip install --no-cache-dir -r requirements-runtime.txt
+# Install the pinned CPU wheels first so the subsequent cross-platform runtime
+# requirements check reuses them instead of resolving CUDA-enabled PyPI wheels.
+RUN python -m pip install --no-cache-dir \
+        --index-url https://download.pytorch.org/whl/cpu \
+        torch==2.13.0 torchvision==0.28.0 \
+    && python -m pip install --no-cache-dir -r requirements-runtime.txt
 
 COPY backend/__init__.py ./backend/__init__.py
 COPY backend/app ./backend/app
@@ -31,8 +36,10 @@ COPY models/factorymind_anomaly_model_v1.metadata.json ./models/factorymind_anom
 COPY models/factorymind_visual_quality_model_v1.joblib ./models/factorymind_visual_quality_model_v1.joblib
 COPY models/factorymind_visual_quality_model_v1.metadata.json ./models/factorymind_visual_quality_model_v1.metadata.json
 
-# Enforce manifest checks and the same strict compatibility loader used at API startup.
-RUN python scripts/prepare_artifacts.py
+# Deterministically verify the manifest, required files, and recorded checksums
+# without deserializing every model under cross-architecture emulation. FastAPI
+# startup still runs the authoritative full compatibility/model-loading checks.
+RUN python scripts/prepare_artifacts.py --files-only
 
 RUN useradd --create-home --uid 10001 factorymind
 USER factorymind

@@ -624,7 +624,14 @@ def _validate_visual_metadata(metadata: dict[str, Any]) -> None:
     }
     for field, runtime_version in runtime_versions.items():
         recorded = _require_nonempty_string(metadata, field, artifact_name)
-        if recorded != runtime_version:
+        # Official PyTorch CPU wheels append the PEP 440 local marker ``+cpu``.
+        # Accept only that deployment marker for the two pinned PyTorch packages;
+        # all public versions and every other dependency must still match exactly.
+        compatible_cpu_wheel = (
+            field in {"torch_version", "torchvision_version"}
+            and runtime_version == f"{recorded}+cpu"
+        )
+        if recorded != runtime_version and not compatible_cpu_wheel:
             raise ArtifactLoadError(
                 f"Visual quality artifact {field} {recorded!r} is incompatible with runtime {runtime_version!r}."
             )

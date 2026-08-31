@@ -36,6 +36,24 @@ def test_malformed_metadata(monkeypatch, tmp_path, actual_bundle):
     with pytest.raises(ArtifactLoadError, match="valid visual quality metadata JSON"): load_visual_resources()
 
 
+def test_visual_metadata_accepts_official_cpu_wheel_version_suffix(monkeypatch):
+    metadata = json.loads(model_loader.VISUAL_METADATA_PATH.read_text())
+    monkeypatch.setattr(model_loader.torch, "__version__", f"{metadata['torch_version']}+cpu")
+    monkeypatch.setattr(
+        model_loader.torchvision,
+        "__version__",
+        f"{metadata['torchvision_version']}+cpu",
+    )
+    model_loader._validate_visual_metadata(metadata)
+
+
+def test_visual_metadata_rejects_cuda_wheel_version_suffix(monkeypatch):
+    metadata = json.loads(model_loader.VISUAL_METADATA_PATH.read_text())
+    monkeypatch.setattr(model_loader.torch, "__version__", f"{metadata['torch_version']}+cu130")
+    with pytest.raises(ArtifactLoadError, match="torch_version.*incompatible"):
+        model_loader._validate_visual_metadata(metadata)
+
+
 @pytest.mark.parametrize(("mutator", "message"), [
     (lambda m: m.update(dataset_category="bottle"), "dataset_category"),
     (lambda m: m.update(threshold_raw_score=.4), "threshold"),

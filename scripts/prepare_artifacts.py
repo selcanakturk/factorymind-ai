@@ -50,6 +50,7 @@ def prepare_artifacts(
     root: Path = PROJECT_ROOT,
     *,
     build_missing: bool = False,
+    files_only: bool = False,
     visual_builder: Callable[..., object] | None = None,
 ) -> list[str]:
     manifest = load_manifest(root / "models" / "artifact_manifest.json")
@@ -105,12 +106,20 @@ def prepare_artifacts(
     if remaining:
         return remaining
 
-    # Preserve the backend's strict, authoritative artifact compatibility checks.
-    if root == PROJECT_ROOT:
+    # Preserve the backend's strict, authoritative artifact compatibility checks
+    # by default. Docker builds can explicitly limit validation to deterministic
+    # manifest, file-presence, and checksum checks; startup still uses the loader.
+    if root == PROJECT_ROOT and not files_only:
         from backend.app.core.model_loader import load_model_resources
 
         load_model_resources()
-    print("All required FactoryMind runtime artifacts are present and valid.")
+    if files_only:
+        print(
+            "All required FactoryMind runtime artifact files are present and "
+            "recorded checksums are valid; runtime model loading was not performed."
+        )
+    else:
+        print("All required FactoryMind runtime artifacts are present and valid.")
     return []
 
 
@@ -121,8 +130,19 @@ def main() -> int:
         action="store_true",
         help="Explicitly build missing local-build artifacts from user-supplied datasets.",
     )
+    parser.add_argument(
+        "--files-only",
+        action="store_true",
+        help=(
+            "Validate manifest readability, required files, and recorded checksums "
+            "without importing or loading runtime models."
+        ),
+    )
     args = parser.parse_args()
-    return 1 if prepare_artifacts(build_missing=args.build_missing) else 0
+    return 1 if prepare_artifacts(
+        build_missing=args.build_missing,
+        files_only=args.files_only,
+    ) else 0
 
 
 if __name__ == "__main__":
