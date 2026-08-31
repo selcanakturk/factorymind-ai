@@ -1,0 +1,28 @@
+.git
+.gitignore
+.venv
+venv
+__pycache__
+*.py[cod]
+.pytest_cache
+.ipynb_checkpoints
+.DS_Store
+.idea
+.vscode
+
+# Research data and non-runtime project areas never enter the private image.
+data
+notebooks
+frontend
+docs
+tests
+backend/tests
+
+# Local environment and generated frontend files.
+.env
+.env.*
+node_modules
+dist
+
+# Docker does not consult .gitignore. The models directory is intentionally not
+# excluded because this private-image workflow packages the frozen visual bundle.
