@@ -1,5 +1,7 @@
 # FactoryMind AI
 
+git status
+
 An end-to-end industrial AI platform for machine failure risk, remaining useful life estimation, sensor anomaly detection, and visual quality inspection. FactoryMind combines reproducible machine-learning pipelines with a guarded FastAPI backend and a React + TypeScript dashboard.
 
 **Python 3.13 · FastAPI · scikit-learn · PyTorch · React · TypeScript · Vite**
@@ -8,12 +10,12 @@ An end-to-end industrial AI platform for machine failure risk, remaining useful 
 
 ## At a glance
 
-| Module | Purpose | Dataset | Production approach | Status |
-|---|---|---|---|---|
-| Failure Risk | Score one machine observation and assign an operational risk category | UCI AI4I 2020 | Sigmoid-calibrated Gradient Boosting | Operational |
-| Remaining Useful Life | Estimate capped RUL from an engine trajectory | NASA C-MAPSS FD001 | Random Forest with backward-looking temporal features | Operational |
-| Sensor Anomaly Detection | Detect unusual sensor states and persistent alerts | NASA C-MAPSS FD001 | StandardScaler + Isolation Forest | Operational |
-| Visual Quality Inspection | Identify visual differences from a learned normal zipper reference | MVTec AD, zipper category | PatchCore-style nearest-neighbor anomaly detection | Operational |
+| Module                    | Purpose                                                               | Dataset                   | Production approach                                   | Status      |
+| ------------------------- | --------------------------------------------------------------------- | ------------------------- | ----------------------------------------------------- | ----------- |
+| Failure Risk              | Score one machine observation and assign an operational risk category | UCI AI4I 2020             | Sigmoid-calibrated Gradient Boosting                  | Operational |
+| Remaining Useful Life     | Estimate capped RUL from an engine trajectory                         | NASA C-MAPSS FD001        | Random Forest with backward-looking temporal features | Operational |
+| Sensor Anomaly Detection  | Detect unusual sensor states and persistent alerts                    | NASA C-MAPSS FD001        | StandardScaler + Isolation Forest                     | Operational |
+| Visual Quality Inspection | Identify visual differences from a learned normal zipper reference    | MVTec AD, zipper category | PatchCore-style nearest-neighbor anomaly detection    | Operational |
 
 The project demonstrates the complete path from exploratory research and feature engineering to frozen inference code, versioned artifacts, REST contracts, interactive workflows, automated tests, and responsible communication of model limitations.
 
@@ -31,12 +33,12 @@ The production pipeline adds three deterministic features:
 
 A `GradientBoostingClassifier` is wrapped in five-fold sigmoid calibration. Its output is used as a calibrated, model-derived risk estimate—not as a guaranteed real-world probability of future failure.
 
-| Risk category | Calibrated-score interval | Provisional policy objective |
-|---|---:|---|
-| Low | below 4.27% | Below the screening boundary |
-| Medium | 4.27% to below 23.89% | Highest precision while recall remains at least 90% |
-| High | 23.89% to below 40.83% | Highest recall while precision remains at least 90% |
-| Critical | 40.83% and above | Highest recall while precision remains at least 95% |
+| Risk category | Calibrated-score interval | Provisional policy objective                        |
+| ------------- | ------------------------: | --------------------------------------------------- |
+| Low           |               below 4.27% | Below the screening boundary                        |
+| Medium        |     4.27% to below 23.89% | Highest precision while recall remains at least 90% |
+| High          |    23.89% to below 40.83% | Highest recall while precision remains at least 90% |
+| Critical      |          40.83% and above | Highest recall while precision remains at least 95% |
 
 The exact thresholds were derived from out-of-fold training predictions. The project holdout had already been examined during earlier model development, so it is documented as development-exposed rather than an untouched lockbox.
 
@@ -95,20 +97,20 @@ These are public-dataset research and development benchmarks, not evidence of re
 
 ### Failure Risk
 
-| Metric | Development holdout |
-|---|---:|
-| ROC-AUC | 0.9648 |
-| Average precision | 0.9063 |
-| Brier score | 0.00615 |
-| Log loss | 0.03111 |
+| Metric            | Development holdout |
+| ----------------- | ------------------: |
+| ROC-AUC           |              0.9648 |
+| Average precision |              0.9063 |
+| Brier score       |             0.00615 |
+| Log loss          |             0.03111 |
 
 ### Remaining Useful Life
 
-| Evaluation | RMSE | MAE | R² | NASA score |
-|---|---:|---:|---:|---:|
-| Grouped development CV, mean | 16.36 | 11.10 | 0.8456 | — |
-| Official FD001 endpoint benchmark | 17.54 | 13.03 | 0.8084 | 522.95 |
-| Near failure, raw RUL ≤ 30 | 14.18 | 8.84 | — | — |
+| Evaluation                        |  RMSE |   MAE |     R² | NASA score |
+| --------------------------------- | ----: | ----: | -----: | ---------: |
+| Grouped development CV, mean      | 16.36 | 11.10 | 0.8456 |          — |
+| Official FD001 endpoint benchmark | 17.54 | 13.03 | 0.8084 |     522.95 |
+| Near failure, raw RUL ≤ 30        | 14.18 |  8.84 |      — |          — |
 
 Near-failure mean signed error is **+7.00 cycles** (`prediction − actual`), documenting the model's tendency to overestimate in that region. The official FD001 test set became development-exposed after evaluation.
 
@@ -116,31 +118,31 @@ Near-failure mean signed error is **+7.00 cycles** (`prediction − actual`), do
 
 FD001 has no externally validated anomaly labels, so supervised accuracy is not reported. Repeated development diagnostics found:
 
-| Heuristic diagnostic | Result |
-|---|---:|
-| Healthy-reference observation alert burden | 2.85% ± 1.03% |
-| Critical-region observation alert coverage | 99.65% ± 0.42% |
-| Critical-engine persistent-alert coverage | 100% |
-| Mean median retrospective lead-time finding | 59.8 cycles |
+| Heuristic diagnostic                        |         Result |
+| ------------------------------------------- | -------------: |
+| Healthy-reference observation alert burden  |  2.85% ± 1.03% |
+| Critical-region observation alert coverage  | 99.65% ± 0.42% |
+| Critical-engine persistent-alert coverage   |           100% |
+| Mean median retrospective lead-time finding |    59.8 cycles |
 
 These values characterize the selected heuristic; they are not independent anomaly-detection validation.
 
 ### Visual Quality Inspection
 
-| Level | ROC-AUC | Average precision | Precision | Recall | F1 |
-|---|---:|---:|---:|---:|---:|
-| Image | 0.9480 | 0.9842 | 0.9339 | 0.9496 | 0.9417 |
-| Pixel | 0.9716 | 0.4479 | — | — | — |
+| Level | ROC-AUC | Average precision | Precision | Recall |     F1 |
+| ----- | ------: | ----------------: | --------: | -----: | -----: |
+| Image |  0.9480 |            0.9842 |    0.9339 | 0.9496 | 0.9417 |
+| Pixel |  0.9716 |            0.4479 |         — |      — |      — |
 
 At the frozen image threshold, the benchmark confusion matrix contains 24 TN, 8 FP, 6 FN, and 113 TP. Compared with the earlier simple baseline (3 FP, 22 FN), the PatchCore-style model prioritizes sensitivity at the cost of more manual reinspection.
 
 ## Responsible model interpretation
 
-| Output | Appropriate interpretation |
-|---|---|
-| Failure risk | A calibrated model-derived estimate for one observation; not a guaranteed future-failure probability |
-| RUL | A capped development-stage point estimate; not a guaranteed minimum lifetime or uncertainty interval |
-| Sensor anomaly | Unusualness relative to a retrospectively defined normal reference; not proof of failure |
+| Output         | Appropriate interpretation                                                                                     |
+| -------------- | -------------------------------------------------------------------------------------------------------------- |
+| Failure risk   | A calibrated model-derived estimate for one observation; not a guaranteed future-failure probability           |
+| RUL            | A capped development-stage point estimate; not a guaranteed minimum lifetime or uncertainty interval           |
+| Sensor anomaly | Unusualness relative to a retrospectively defined normal reference; not proof of failure                       |
 | Visual anomaly | Appearance difference from a learned normal zipper reference; not defect diagnosis, severity, or certification |
 
 FactoryMind is a portfolio and research system. Its outputs should support investigation and engineering judgment, not replace inspection, maintenance history, or safety procedures.
@@ -178,28 +180,28 @@ docs/images/   Reserved location for final portfolio screenshots
 
 ## Technology stack
 
-| Area | Technologies |
-|---|---|
-| Machine learning | Python, NumPy, pandas, scikit-learn, PyTorch, Torchvision, Pillow |
-| Backend | FastAPI, Pydantic, Uvicorn, multipart image handling |
-| Frontend | React, TypeScript, Vite, HTML Canvas |
+| Area                | Technologies                                                              |
+| ------------------- | ------------------------------------------------------------------------- |
+| Machine learning    | Python, NumPy, pandas, scikit-learn, PyTorch, Torchvision, Pillow         |
+| Backend             | FastAPI, Pydantic, Uvicorn, multipart image handling                      |
+| Frontend            | React, TypeScript, Vite, HTML Canvas                                      |
 | Testing and tooling | pytest, FastAPI TestClient, Node test runner, ESLint, TypeScript compiler |
 
 ## API
 
 The backend exposes a stable REST contract:
 
-| Method | Route | Purpose |
-|---|---|---|
-| `POST` | `/predict/failure` | Failure-risk scoring and category assignment |
-| `POST` | `/predict/rul` | Latest-cycle RUL estimation from a trajectory |
-| `POST` | `/predict/anomaly` | Current anomaly scoring and persistence evaluation |
-| `POST` | `/predict/visual-quality` | Multipart JPEG/PNG visual inspection |
-| `GET` | `/health` | Readiness of all four model resources |
-| `GET` | `/model/info` | Failure-model specification |
-| `GET` | `/model/rul/info` | RUL-model specification |
-| `GET` | `/model/anomaly/info` | Anomaly-model specification |
-| `GET` | `/model/visual-quality/info` | Visual-model specification |
+| Method | Route                        | Purpose                                            |
+| ------ | ---------------------------- | -------------------------------------------------- |
+| `POST` | `/predict/failure`           | Failure-risk scoring and category assignment       |
+| `POST` | `/predict/rul`               | Latest-cycle RUL estimation from a trajectory      |
+| `POST` | `/predict/anomaly`           | Current anomaly scoring and persistence evaluation |
+| `POST` | `/predict/visual-quality`    | Multipart JPEG/PNG visual inspection               |
+| `GET`  | `/health`                    | Readiness of all four model resources              |
+| `GET`  | `/model/info`                | Failure-model specification                        |
+| `GET`  | `/model/rul/info`            | RUL-model specification                            |
+| `GET`  | `/model/anomaly/info`        | Anomaly-model specification                        |
+| `GET`  | `/model/visual-quality/info` | Visual-model specification                         |
 
 Interactive Swagger/OpenAPI documentation is available at `/docs` while the backend is running.
 
@@ -299,10 +301,10 @@ Vite normally serves the dashboard at `http://localhost:5173`.
 
 ## Environment variables
 
-| Variable | Component | Purpose | Development behavior |
-|---|---|---|---|
-| `VITE_API_BASE_URL` | Frontend | Backend base URL | Defaults to `http://127.0.0.1:8000` |
-| `FACTORYMIND_CORS_ORIGINS` | Backend | Comma-separated additional frontend origins | Localhost ports 3000 and 5173 remain allowed |
+| Variable                   | Component | Purpose                                     | Development behavior                         |
+| -------------------------- | --------- | ------------------------------------------- | -------------------------------------------- |
+| `VITE_API_BASE_URL`        | Frontend  | Backend base URL                            | Defaults to `http://127.0.0.1:8000`          |
+| `FACTORYMIND_CORS_ORIGINS` | Backend   | Comma-separated additional frontend origins | Localhost ports 3000 and 5173 remain allowed |
 
 Production-style example:
 
@@ -358,11 +360,11 @@ The notebooks preserve the progression from **EDA → feature engineering → mo
 
 Raw datasets are intentionally excluded from this repository and retain their original ownership and usage terms.
 
-| Dataset | FactoryMind use | Scope and usage note |
-|---|---|---|
-| UCI AI4I 2020 Predictive Maintenance | Failure-risk classification and calibration | Synthetic multivariate predictive-maintenance benchmark; users must review the original dataset terms |
-| NASA C-MAPSS FD001 | RUL and sensor-anomaly research | Simulated turbofan degradation with one operating condition and one fault mode; users must review NASA's source terms |
-| MVTec AD | Zipper visual anomaly research | Zipper category only; CC BY-NC-SA/noncommercial constraints apply and must be reviewed before use |
+| Dataset                              | FactoryMind use                             | Scope and usage note                                                                                                  |
+| ------------------------------------ | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| UCI AI4I 2020 Predictive Maintenance | Failure-risk classification and calibration | Synthetic multivariate predictive-maintenance benchmark; users must review the original dataset terms                 |
+| NASA C-MAPSS FD001                   | RUL and sensor-anomaly research             | Simulated turbofan degradation with one operating condition and one fault mode; users must review NASA's source terms |
+| MVTec AD                             | Zipper visual anomaly research              | Zipper category only; CC BY-NC-SA/noncommercial constraints apply and must be reviewed before use                     |
 
 FactoryMind does not relicense or redistribute these raw datasets.
 
