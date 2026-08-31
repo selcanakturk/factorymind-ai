@@ -1,0 +1,14 @@
+{
+  "manifest_version": "1.0.0",
+  "artifacts": [
+    {"filename": "factorymind_failure_model_v1.joblib", "module": "failure_risk", "required": true, "expected_version": "1.0.0", "sha256": "a261612ceb7c25851b9ff152f10be7bc62f76b8eaab284f2df78be6cb38c89db", "distribution": "git", "build_source": "src.train"},
+    {"filename": "factorymind_failure_model_v1.metadata.json", "module": "failure_risk", "required": true, "expected_version": "1.0.0", "sha256": "2d2a262737e14c198e29af24b7bc8eaf1635a6ab413140287a62e748a8596ff9", "distribution": "git", "build_source": "src.train"},
+    {"filename": "factorymind_failure_risk_thresholds_v1.json", "module": "failure_risk", "required": true, "expected_version": "1.0.0", "sha256": "52fe49a8367ddafc80d518cf6f7a5837bb35c6ade21e506a9cd0825763fe7ee2", "distribution": "git", "build_source": "notebooks/05_calibrated_risk_thresholds.ipynb"},
+    {"filename": "factorymind_rul_model_v1.joblib", "module": "rul", "required": true, "expected_version": "1.0.0", "sha256": "4785d3a966ec82714ea52882787111eb52b4cadcedd33e3b57362e5c94703aaf", "distribution": "git", "build_source": "src.rul_train"},
+    {"filename": "factorymind_rul_model_v1.metadata.json", "module": "rul", "required": true, "expected_version": "1.0.0", "sha256": "841a2917da7856d6438e8b37cacb0b72c11d323ad979976d03c967612a02f178", "distribution": "git", "build_source": "src.rul_train"},
+    {"filename": "factorymind_anomaly_model_v1.joblib", "module": "sensor_anomaly", "required": true, "expected_version": "1.0.0", "sha256": "de37ca5f8cdd769449e15e9c341ff62fd11fa97edada871eba7b582cdf812ecb", "distribution": "git", "build_source": "src.anomaly_train"},
+    {"filename": "factorymind_anomaly_model_v1.metadata.json", "module": "sensor_anomaly", "required": true, "expected_version": "1.0.0", "sha256": "69affc7af2df9c0a3eaf48d9704342d06bd87f2bf8d33199901010bad0bef57e", "distribution": "git", "build_source": "src.anomaly_train"},
+    {"filename": "factorymind_visual_quality_model_v1.joblib", "module": "visual_quality", "required": true, "expected_version": "visual-quality-v1", "sha256": null, "reference_sha256": "82ee40e49c44802a9bd63c41d80786d0eecb1f1d5819c36780325f5620954362", "distribution": "local_build", "build_source": "src.visual_train", "required_dataset": "data/raw/mvtec_ad/zipper"},
+    {"filename": "factorymind_visual_quality_model_v1.metadata.json", "module": "visual_quality", "required": true, "expected_version": "visual-quality-v1", "sha256": null, "reference_sha256": "8885840254b65b84ff47cff03fae7e528c4bbb743495d47a8b2a0cd83d8c63d6", "distribution": "local_build", "build_source": "src.visual_train", "required_dataset": "data/raw/mvtec_ad/zipper"}
+  ]
+}

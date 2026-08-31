@@ -1,6 +1,7 @@
 # Python
 __pycache__/
 *.py[cod]
+.pytest_cache/
 
 # Virtual environments
 .venv/
@@ -21,3 +22,17 @@ models/*
 *.joblib
 *.pkl
 
+# Release manifest and redistributable tabular production artifacts.
+!models/artifact_manifest.json
+!models/factorymind_failure_model_v1.joblib
+!models/factorymind_failure_model_v1.metadata.json
+!models/factorymind_failure_risk_thresholds_v1.json
+!models/factorymind_rul_model_v1.joblib
+!models/factorymind_rul_model_v1.metadata.json
+!models/factorymind_anomaly_model_v1.joblib
+!models/factorymind_anomaly_model_v1.metadata.json
+
+# Keep the MVTec-derived visual bundle local-build-only while redistribution
+# rights for the derived coreset remain uncertain.
+models/factorymind_visual_quality_model_v1.joblib
+models/factorymind_visual_quality_model_v1.metadata.json

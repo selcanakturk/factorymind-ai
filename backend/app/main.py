@@ -6,7 +6,6 @@ from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile, status
 from fastapi.exceptions import RequestValidationError
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile as StarletteUploadFile
@@ -19,6 +18,7 @@ from .core.model_loader import (
     VisualModelResources,
     load_model_resources,
 )
+from .cors import configure_cors
 from .schemas import (
     FailurePredictionRequest,
     FailurePredictionResponse,
@@ -81,20 +81,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# The browser client is a separate local development process. Keep this list
-# explicit so enabling the frontend does not create a permissive production CORS policy.
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ],
-    allow_credentials=False,
-    allow_methods=["GET", "POST"],
-    allow_headers=["Content-Type"],
-)
+configure_cors(app)
 
 
 @app.exception_handler(RequestValidationError)

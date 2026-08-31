@@ -1,0 +1,23 @@
+{
+  "threshold_version": "1.0.0",
+  "score_scale": "0-1 sigmoid-calibrated model-derived risk estimate",
+  "calibration_method": "sigmoid",
+  "thresholds": {
+    "medium": 0.04268834673230638,
+    "high": 0.23890961987075965,
+    "critical": 0.4083133440199468
+  },
+  "policy_objectives": {
+    "medium": "highest precision while recall >= 0.90",
+    "high": "highest recall while precision >= 0.90",
+    "critical": "highest recall while precision >= 0.95"
+  },
+  "source_notebook": "notebooks/05_calibrated_risk_thresholds.ipynb",
+  "development_dataset": "AI4I 2020 Predictive Maintenance Dataset",
+  "methodological_warnings": [
+    "Development-stage operational thresholds, not validated industrial safety limits.",
+    "Derived from approximately 271 positive training observations and one primary five-fold OOF run.",
+    "Policy objectives are provisional; no bootstrap confidence intervals are available.",
+    "Validate on an independent project-level lockbox before backend integration."
+  ]
+}

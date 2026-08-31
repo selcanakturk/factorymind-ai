@@ -1,0 +1,112 @@
+{
+  "model_name": "FactoryMind Anomaly FD001 Isolation Forest",
+  "model_version": "1.0.0",
+  "model_family": "IsolationForest",
+  "dataset": "NASA C-MAPSS",
+  "dataset_subset": "FD001",
+  "predictor_columns": [
+    "sensor_2",
+    "sensor_3",
+    "sensor_4",
+    "sensor_7",
+    "sensor_8",
+    "sensor_9",
+    "sensor_11",
+    "sensor_12",
+    "sensor_13",
+    "sensor_14",
+    "sensor_15",
+    "sensor_17",
+    "sensor_20",
+    "sensor_21"
+  ],
+  "predictor_count": 14,
+  "normal_reference_definition": "FD001 training observations with retrospective raw_rul > 125",
+  "normal_reference_rul_threshold": 125,
+  "normal_reference_row_count": 8031,
+  "normal_reference_unit_count": 100,
+  "scaler_type": "StandardScaler(with_mean=True, with_std=True)",
+  "isolation_forest_hyperparameters": {
+    "n_estimators": 300,
+    "max_samples": "auto",
+    "contamination": "auto",
+    "max_features": 1.0,
+    "bootstrap": false,
+    "random_state": 42,
+    "n_jobs": -1
+  },
+  "score_direction": "higher_is_more_anomalous via negative score_samples",
+  "score_distribution_summary": {
+    "min": 0.3814682601270719,
+    "median": 0.4448073918176013,
+    "mean": 0.4488238443626371,
+    "std": 0.03144161783758327,
+    "p90": 0.49168895345023855,
+    "p95": 0.5059465434443097,
+    "p97_5": 0.5197165450433401,
+    "p99": 0.5363123685076172,
+    "max": 0.610362984364187
+  },
+  "threshold_quantile": 0.975,
+  "threshold_raw_score": 0.5197165450433401,
+  "percentile_mapping_method": "100 * count(training_normal_score <= score) / reference_count; right-inclusive ties",
+  "persistence_window": 5,
+  "persistence_required_count": 3,
+  "minimum_persistence_history": 5,
+  "sensor_deviation_method": "StandardScaler z-score; top 5 sorted by absolute deviation",
+  "repeated_split_stability_notebook_12": {
+    "spearman_mean": -0.6882,
+    "spearman_std": 0.0288,
+    "spearman_min": -0.7293,
+    "spearman_max": -0.6543
+  },
+  "alert_rate_stability_notebook_12": {
+    "quantile": 0.975,
+    "healthy_observation_mean_pct": 2.85,
+    "healthy_observation_std_pct": 1.03,
+    "critical_observation_mean_pct": 99.65,
+    "critical_observation_std_pct": 0.42,
+    "critical_engine_coverage_pct": 100.0
+  },
+  "persistence_diagnostics_notebook_12": {
+    "policy": "3 of latest 5",
+    "premature_healthy_engines_mean_pct": 7.0,
+    "critical_engine_coverage_pct": 100.0
+  },
+  "lead_time_findings_notebook_12": {
+    "mean_median_retrospective_cycles": 59.8
+  },
+  "development_diagnostics": {
+    "label": "development diagnostics; not independent validation",
+    "healthy_observation_exceedance_pct": 2.50280164363093,
+    "critical_observation_exceedance_pct": 99.64516129032258,
+    "premature_healthy_persistent_alert_engines_pct": 5.0,
+    "critical_persistent_alert_engine_coverage_pct": 100.0,
+    "engines_never_persistently_alerted": 0,
+    "lead_time_median": 61.0,
+    "lead_time_q25": 42.75,
+    "lead_time_q75": 82.0,
+    "lead_time_min": 25.0,
+    "lead_time_max": 187.0
+  },
+  "known_limitations": [
+    "FD001 is simulated with one operating condition and one fault mode.",
+    "Early-life RUL is a retrospective healthy-state proxy.",
+    "No true or externally validated anomaly labels exist.",
+    "Quantile alerts and lead times are development heuristics.",
+    "No external fleet validation or drift evidence exists."
+  ],
+  "output_interpretation": "Non-probabilistic unusualness relative to the fitted development normal-reference distribution.",
+  "warning": "Anomaly does not mean failure. Unusual sensor behavior may reflect degradation, operating variation, noise, or other causes and should be investigated in context.",
+  "disclaimer": "Development-stage condition-monitoring estimate based on simulated NASA C-MAPSS FD001 data with one operating condition and one fault mode, a retrospectively defined healthy reference, and no externally validated anomaly labels. The anomaly score is not a probability. This is not an industrial safety decision.",
+  "training_row_count": 20631,
+  "training_unit_count": 100,
+  "package_versions": {
+    "python": "3.13.2",
+    "scikit_learn": "1.9.0",
+    "numpy": "2.5.2",
+    "pandas": "3.0.5",
+    "joblib": "1.5.3"
+  },
+  "training_timestamp_utc": "2026-08-20T20:55:39.583560+00:00"
+}

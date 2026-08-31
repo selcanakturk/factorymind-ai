@@ -1,0 +1,34 @@
+{
+  "model_version": "1.0.0",
+  "model_family": "GradientBoostingClassifier",
+  "calibration_method": "sigmoid",
+  "calibration_cv": "5-fold stratified cross-validation",
+  "raw_input_features": [
+    "Type",
+    "Air temperature [K]",
+    "Process temperature [K]",
+    "Rotational speed [rpm]",
+    "Torque [Nm]",
+    "Tool wear [min]"
+  ],
+  "engineered_features": [
+    "Temperature difference",
+    "Power proxy",
+    "Mechanical strain proxy"
+  ],
+  "target": "Machine failure",
+  "training_dataset": "AI4I 2020 Predictive Maintenance Dataset",
+  "training_timestamp_utc": "2026-08-18T19:57:13.025062+00:00",
+  "training_observations": 8000,
+  "holdout_observations": 2000,
+  "holdout_failures": 68,
+  "evaluation_metrics": {
+    "roc_auc": 0.9648337595907928,
+    "average_precision": 0.9063454849097756,
+    "brier_score": 0.006145037342604906,
+    "log_loss": 0.031114284081488534
+  },
+  "output_interpretation": "Sigmoid-calibrated model-derived risk estimate between 0 and 1; not a guaranteed real-world failure probability.",
+  "methodological_warning": "The fixed holdout is development-stage and was examined in previous notebooks. Validate on an independent lockbox before production claims.",
+  "categorical_risk_thresholds": null
+}
